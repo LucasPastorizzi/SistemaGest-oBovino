@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle de Bezerros</title>
+<meta name="theme-color" content="#1b5e20">
+<meta name="description" content="Registre o nascimento dos bezerros e receba aviso do dia de apartar. Simples e fácil de usar. Desenvolvido por Flypi Enterprise.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Flypi Enterprise">
+<meta property="og:title" content="Controle de Bezerros">
+<meta property="og:description" content="Registre o nascimento dos bezerros e receba aviso do dia de apartar. Simples e fácil de usar.">
+<meta property="og:url" content="https://flypi-bezerros.vercel.app/">
+<meta property="og:image" content="https://flypi-bezerros.vercel.app/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="600">
+<meta property="og:image:height" content="315">
+<meta property="og:image:alt" content="Controle de Bezerros - Flypi Enterprise">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b5e20'/%3E%3Cpath d='M17 19 Q10 15 9 8 Q15 12 21 14 Z' fill='%23f3e2b3'/%3E%3Cpath d='M47 19 Q54 15 55 8 Q49 12 43 14 Z' fill='%23f3e2b3'/%3E%3Cellipse cx='11' cy='25' rx='7' ry='4' fill='%23ffffff' transform='rotate(-20 11 25)'/%3E%3Cellipse cx='53' cy='25' rx='7' ry='4' fill='%23ffffff' transform='rotate(20 53 25)'/%3E%3Cellipse cx='11.5' cy='25' rx='4' ry='2' fill='%23f7a8b8' transform='rotate(-20 11.5 25)'/%3E%3Cellipse cx='52.5' cy='25' rx='4' ry='2' fill='%23f7a8b8' transform='rotate(20 52.5 25)'/%3E%3Cpath d='M18 18 Q32 10 46 18 L45 40 Q32 46 19 40 Z' fill='%23ffffff'/%3E%3Cpath d='M30 13 Q38 12 44 17 Q44 26 37 27 Q31 24 30 13 Z' fill='%23222'/%3E%3Ccircle cx='25' cy='28' r='2.6' fill='%23222'/%3E%3Ccircle cx='39' cy='28' r='2.6' fill='%23222'/%3E%3Cellipse cx='32' cy='45' rx='13' ry='9' fill='%23f7a8b8'/%3E%3Cellipse cx='27' cy='45' rx='2.2' ry='3' fill='%23a3475b'/%3E%3Cellipse cx='37' cy='45' rx='2.2' ry='3' fill='%23a3475b'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root{
+    --verde:#2e7d32; --verde-esc:#1b5e20; --verde-claro:#e8f5e9;
+    --vermelho:#c62828; --vermelho-claro:#ffebee;
+    --amarelo:#f57f17; --amarelo-claro:#fff8e1;
+    --cinza:#616161; --cinza-claro:#eeeeee;
+    --fundo:#f5f1e8; --card:#ffffff; --texto:#1f1f1f; --borda:#d6d0c4;
+  }
+  *{box-sizing:border-box}
+  html{font-size:20px}
+  body{margin:0;font-family:"Segoe UI",Arial,Helvetica,sans-serif;background:var(--fundo);color:var(--texto);line-height:1.4}
+  .hidden{display:none !important}
+
+  .topo{background:var(--verde-esc);color:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  .topo h1{margin:0;font-size:1.8rem}
+  .topo p{margin:4px 0 0;font-size:1.05rem;opacity:.9}
+
+  main{max-width:1150px;margin:0 auto;padding:16px}
+
+  .btn{font-size:1rem;font-family:inherit;padding:12px 20px;border-radius:12px;border:2px solid transparent;cursor:pointer;font-weight:600;line-height:1.2}
+  .btn:focus-visible{outline:4px solid #ffb300;outline-offset:2px}
+  .btn.grande{font-size:1.25rem;padding:16px 28px}
+  .verde{background:#43a047;color:#fff} .verde:hover{background:var(--verde)}
+  .branco{background:#fff;color:var(--texto);border-color:var(--borda)} .branco:hover{background:#f0ece2}
+  .vermelho{background:var(--vermelho);color:#fff} .vermelho:hover{background:#a51d1d}
+  .contorno-vermelho{background:#fff;color:var(--vermelho);border-color:#e9a5a5}
+  .contorno-vermelho:hover{background:var(--vermelho-claro)}
+
+  .faixa{background:#fff3cd;border:2px solid #e0b400;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+
+  .resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+  .resumo button{font-family:inherit;text-align:left;background:var(--card);border:3px solid var(--borda);border-radius:14px;padding:14px 16px;cursor:pointer;color:var(--texto)}
+  .resumo button.ativo{border-color:var(--verde-esc);box-shadow:0 0 0 3px #a5d6a7}
+  .resumo .num{display:block;font-size:2.2rem;font-weight:700;line-height:1.1}
+  .resumo .rot{font-size:1rem}
+  .resumo .r-pe .num{color:var(--verde)}
+  .resumo .r-perto .num{color:var(--amarelo)}
+  .resumo .r-atraso .num{color:var(--vermelho)}
+  .resumo .r-apart .num{color:var(--cinza)}
+
+  .barra{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  .barra input{flex:1;min-width:240px;font-size:1.1rem;padding:14px 16px;border:2px solid var(--borda);border-radius:12px;font-family:inherit}
+  .titulo-lista{font-size:1.3rem;margin:4px 0 12px}
+
+  #lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  .card{background:var(--card);border-radius:14px;border:2px solid var(--borda);border-left:12px solid var(--verde);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+  .card.st-perto{border-left-color:var(--amarelo)}
+  .card.st-atrasado{border-left-color:var(--vermelho)}
+  .card.st-apartado{border-left-color:#9e9e9e;opacity:.9}
+  .card-topo{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .brinco{font-size:1.5rem;font-weight:700}
+  .nome{font-size:1.15rem;color:#444}
+  .info div{margin:2px 0}
+  .prazo{font-weight:700;font-size:1.15rem;padding:8px 12px;border-radius:10px}
+  .st-ok .prazo{background:var(--verde-claro);color:var(--verde-esc)}
+  .st-perto .prazo{background:var(--amarelo-claro);color:#8a4b00}
+  .st-atrasado .prazo{background:var(--vermelho-claro);color:var(--vermelho)}
+  .st-apartado .prazo{background:var(--cinza-claro);color:#424242}
+  .obs{font-style:italic;color:#555}
+  .botoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .botoes .btn{padding:10px 14px;font-size:.95rem}
+  .vazio{grid-column:1/-1;text-align:center;background:var(--card);border:2px dashed var(--borda);border-radius:14px;padding:32px;font-size:1.15rem}
+
+  .rodape{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:28px 0 12px;padding-top:16px;border-top:2px solid var(--borda)}
+
+  .credito{text-align:center;color:#6d6d6d;font-size:.85rem;margin:4px 0 24px}
+  .credito a{color:var(--verde-esc);font-weight:700;text-decoration:none}
+  .credito a:hover{text-decoration:underline}
+
+  /* Janelas */
+  .fundo-janela{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto;z-index:50}
+  .janela{background:#fff;border-radius:16px;max-width:680px;width:100%;padding:22px 24px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+  .janela h2{margin:0 0 12px;font-size:1.6rem}
+  .janela.alerta h2{color:var(--vermelho)}
+  .lista-alerta{list-style:none;padding:0;margin:0 0 16px;display:flex;flex-direction:column;gap:8px}
+  .lista-alerta li{padding:12px 14px;border-radius:10px;font-size:1.1rem}
+  .lista-alerta li.a-atrasado{background:var(--vermelho-claro);border:2px solid #ef9a9a}
+  .lista-alerta li.a-perto{background:var(--amarelo-claro);border:2px solid #ffcc80}
+  .janela .acoes{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}
+
+  .campo{margin-bottom:14px}
+  .campo label,.campo .rot{display:block;font-weight:600;margin-bottom:6px}
+  .campo input[type=text],.campo input[type=date],.campo input[type=number],.campo textarea{width:100%;font-size:1.1rem;padding:12px 14px;border:2px solid var(--borda);border-radius:10px;font-family:inherit}
+  .campo textarea{min-height:70px;resize:vertical}
+  .campo input:focus,.campo textarea:focus{border-color:var(--verde);outline:none;box-shadow:0 0 0 3px #c8e6c9}
+  .dica{font-size:.9rem;color:#555;margin-top:4px}
+  .opcoes{display:flex;gap:10px;flex-wrap:wrap}
+  .opcoes label{display:flex;align-items:center;gap:8px;border:2px solid var(--borda);border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600;margin:0}
+  .opcoes input{width:22px;height:22px}
+  .opcoes label:has(input:checked){border-color:var(--verde);background:var(--verde-claro)}
+  .duas{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:560px){.duas{grid-template-columns:1fr}}
+  .erro{background:var(--vermelho-claro);color:var(--vermelho);border:2px solid #ef9a9a;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:600}
+  .chk{display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer}
+  .chk input{width:24px;height:24px}
+  .ajuda ol{padding-left:24px} .ajuda li{margin-bottom:10px}
+
+  #impressao{display:none}
+  @media print{
+    html{font-size:12pt}
+    body>*:not(#impressao){display:none !important}
+    #impressao{display:block}
+    #impressao table{width:100%;border-collapse:collapse}
+    #impressao th,#impressao td{border:1px solid #000;padding:5px 6px;text-align:left}
+    #impressao th{background:#ddd}
+  }
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div>
+    <h1>🐄 Controle de Bezerros</h1>
+    <p id="hojeTxt"></p>
+  </div>
+  <button class="btn grande branco" onclick="abrirForm()">➕ Cadastrar bezerro</button>
+</header>
+
+<main>
+  <div id="avisoBackup" class="faixa hidden">
+    <span>💾 Faz tempo que não é feita uma <b>cópia de segurança</b> dos dados.</span>
+    <button class="btn verde" onclick="exportar()">Fazer cópia agora</button>
+  </div>
+
+  <section class="resumo">
+    <button class="r-pe" data-filtro="ativos" onclick="mudarFiltro('ativos')"><span class="num" id="cAtivos">0</span><span class="rot">🐮 Bezerros no pé da vaca</span></button>
+    <button class="r-perto" data-filtro="perto" onclick="mudarFiltro('perto')"><span class="num" id="cPerto">0</span><span class="rot" id="rotPerto">⚠️ Perto de apartar</span></button>
+    <button class="r-atraso" data-filtro="atrasados" onclick="mudarFiltro('atrasados')"><span class="num" id="cAtrasados">0</span><span class="rot">🔴 Passou da data</span></button>
+    <button class="r-apart" data-filtro="apartados" onclick="mudarFiltro('apartados')"><span class="num" id="cApartados">0</span><span class="rot">✔️ Já apartados</span></button>
+  </section>
+
+  <section class="barra">
+    <input id="busca" type="text" placeholder="🔍 Procurar pelo número, nome ou mãe..." oninput="render()">
+    <button class="btn branco" onclick="mudarFiltro('todos')">Ver todos</button>
+  </section>
+
+  <h2 class="titulo-lista" id="tituloLista"></h2>
+  <section id="lista"></section>
+
+  <footer class="rodape">
+    <button class="btn branco" onclick="imprimir()">🖨️ Imprimir lista</button>
+    <button class="btn branco" onclick="exportar()">💾 Fazer cópia de segurança</button>
+    <button class="btn branco" onclick="document.getElementById('arqImportar').click()">📂 Recuperar cópia</button>
+    <button class="btn branco" onclick="abrirConfig()">⚙️ Configurações</button>
+    <button class="btn branco" onclick="abrir('jAjuda')">❓ Como usar</button>
+    <input type="file" id="arqImportar" accept=".json,application/json" class="hidden" onchange="importar(this)">
+  </footer>
+  <p class="credito">Desenvolvido por <a href="https://flypi.com.br" target="_blank" rel="noopener">Flypi Enterprise</a></p>
+</main>
+
+<!-- Alerta ao abrir -->
+<div class="fundo-janela hidden" id="jAlerta">
+  <div class="janela alerta" role="dialog" aria-modal="true">
+    <h2>⚠️ Atenção!</h2>
+    <p style="font-size:1.15rem;margin-top:0">Estes bezerros estão chegando na hora de <b>apartar</b>:</p>
+    <ul class="lista-alerta" id="listaAlerta"></ul>
+    <div class="acoes"><button class="btn grande verde" onclick="fechar('jAlerta')">Entendi</button></div>
+  </div>
+</div>
+
+<!-- Cadastro / edição -->
+<div class="fundo-janela hidden" id="jForm">
+  <div class="janela" role="dialog" aria-modal="true">
+    <h2 id="tituloForm">Cadastrar bezerro</h2>
+    <div id="erroForm" class="erro hidden"></div>
+    <div class="duas">
+      <div class="campo"><label for="fBrinco">Número / brinco *</label><input type="text" id="fBrinco" autocomplete="off"></div>
+      <div class="campo"><label for="fNome">Nome (se tiver)</label><input type="text" id="fNome" autocomplete="off"></div>
+    </div>
+    <div class="campo"><label for="fMae">Mãe (número ou nome da vaca)</label><input type="text" id="fMae" autocomplete="off"></div>
+    <div class="campo">
+      <span class="rot">Sexo</span>
+      <div class="opcoes">
+        <label><input type="radio" name="sexo" value="Macho" checked> ♂ Macho</label>
+        <label><input type="radio" name="sexo" value="Fêmea"> ♀ Fêmea</label>
+      </div>
+    </div>
+    <div class="duas">
+      <div class="campo"><label for="fNasc">Dia que nasceu *</label><input type="date" id="fNasc" onchange="nascMudou()"></div>
+      <div class="campo"><label for="fApartar">Dia para apartar *</label><input type="date" id="fApartar" oninput="apartarManual=true"><div class="dica" id="dicaApartar"></div></div>
+    </div>
+    <div class="campo" id="blocoApartado">
+      <label class="chk"><input type="checkbox" id="fApartadoChk" onchange="document.getElementById('campoDataApartado').classList.toggle('hidden',!this.checked)"> Este bezerro já foi apartado</label>
+      <div class="campo hidden" id="campoDataApartado" style="margin-top:10px"><label for="fApartadoData">Dia em que foi apartado</label><input type="date" id="fApartadoData"></div>
+    </div>
+    <div class="campo"><label for="fObs">Observações</label><textarea id="fObs"></textarea></div>
+    <div class="acoes">
+      <button class="btn grande branco" onclick="fechar('jForm')">Cancelar</button>
+      <button class="btn grande verde" onclick="salvarForm()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Configurações -->
+<div class="fundo-janela hidden" id="jConfig">
+  <div class="janela" role="dialog" aria-modal="true">
+    <h2>⚙️ Configurações</h2>
+    <div class="campo">
+      <label for="cfgDias">Com quantos dias de vida o bezerro é apartado?</label>
+      <input type="number" id="cfgDias" min="30" max="400" oninput="atualizaDicaCfg()">
+      <div class="dica" id="dicaCfg"></div>
+    </div>
+    <div class="campo">
+      <label for="cfgAviso">Avisar quantos dias antes da data de apartar?</label>
+      <input type="number" id="cfgAviso" min="1" max="120">
+    </div>
+    <p class="dica">A nova quantidade de dias vale para os próximos cadastros. Os bezerros já cadastrados mantêm a data que foi salva (dá para mudar em "Editar").</p>
+    <div class="acoes">
+      <button class="btn grande branco" onclick="fechar('jConfig')">Cancelar</button>
+      <button class="btn grande verde" onclick="salvarConfig()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ajuda -->
+<div class="fundo-janela hidden" id="jAjuda">
+  <div class="janela ajuda" role="dialog" aria-modal="true">
+    <h2>❓ Como usar</h2>
+    <ol>
+      <li>Quando nascer um bezerro, clique em <b>➕ Cadastrar bezerro</b>, coloque o número e o dia que nasceu e clique em <b>Salvar</b>. O dia de apartar é calculado sozinho.</li>
+      <li>Toda vez que abrir o programa, aparece um <b>aviso</b> com os bezerros que estão perto de apartar.</li>
+      <li>As cores mostram a situação: <b style="color:var(--verde)">verde</b> = tudo certo, <b style="color:var(--amarelo)">amarelo</b> = está chegando a hora, <b style="color:var(--vermelho)">vermelho</b> = já passou do dia.</li>
+      <li>Depois de apartar, clique em <b>✅ Já apartei</b> no cartão do bezerro.</li>
+      <li>Clique nos quadros de cima (No pé, Perto de apartar...) para ver só aquele grupo.</li>
+      <li>Uma vez por mês, clique em <b>💾 Fazer cópia de segurança</b> e guarde o arquivo num pendrive. Se o computador der problema, use <b>📂 Recuperar cópia</b>.</li>
+    </ol>
+    <div class="acoes"><button class="btn grande verde" onclick="fechar('jAjuda')">Entendi</button></div>
+  </div>
+</div>
+
+<!-- Confirmação -->
+<div class="fundo-janela hidden" id="jConfirma">
+  <div class="janela" role="dialog" aria-modal="true">
+    <h2 id="confTitulo">Confirmar</h2>
+    <p id="confTexto" style="font-size:1.15rem"></p>
+    <div class="acoes">
+      <button class="btn grande branco" onclick="fechar('jConfirma')">Não</button>
+      <button class="btn grande verde" id="confOk">Sim</button>
+    </div>
+  </div>
+</div>
+
+<div id="impressao"></div>
+
+<script>
+const CHAVE = 'controleBezerros_dados_v1';
+const CHAVE_CFG = 'controleBezerros_config_v1';
+
+function carregar(chave, padrao){
+  try { const v = localStorage.getItem(chave); return v ? JSON.parse(v) : padrao; }
+  catch(e){ return padrao; }
+}
+function gravar(chave, valor){
+  try { localStorage.setItem(chave, JSON.stringify(valor)); return true; }
+  catch(e){ alert('Atenção: não foi possível salvar os dados neste computador. Faça uma cópia de segurança.'); return false; }
+}
+
+let bezerros = carregar(CHAVE, []);
+if(!Array.isArray(bezerros)) bezerros = [];
+let cfg = Object.assign({diasApartar:210, diasAviso:15, ultimoBackup:null}, carregar(CHAVE_CFG, {}));
+let filtro = 'ativos';
+let editandoId = null;
+let apartarManual = false;
+
+/* ---------- Datas ---------- */
+const pad = n => String(n).padStart(2,'0');
+function hojeISO(){ const d = new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function paraUTC(iso){ const [y,m,d] = iso.split('-').map(Number); return Date.UTC(y,m-1,d); }
+function diasEntre(a,b){ return Math.round((paraUTC(b)-paraUTC(a))/86400000); }
+function somarDias(iso,n){ const d = new Date(paraUTC(iso)+n*86400000); return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate()); }
+function br(iso){ if(!iso) return '—'; const [y,m,d] = iso.split('-'); return d+'/'+m+'/'+y; }
+function plural(n,s,p){ return n+' '+(n===1?s:p); }
+function idade(nasc){
+  const dias = diasEntre(nasc, hojeISO());
+  if(dias < 0) return 'ainda não nasceu';
+  if(dias < 30) return plural(dias,'dia','dias');
+  const m = Math.floor(dias/30), r = dias%30;
+  return plural(m,'mês','meses') + (r ? ' e '+plural(r,'dia','dias') : '');
+}
+function emMeses(dias){ const m = Math.round(dias/30*10)/10; return String(m).replace('.',','); }
+const DIAS_SEMANA = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+
+/* ---------- Situação ---------- */
+function situacao(b){
+  if(b.apartado) return 'apartado';
+  const r = diasEntre(hojeISO(), b.apartar);
+  if(r < 0) return 'atrasado';
+  if(r <= cfg.diasAviso) return 'perto';
+  return 'ok';
+}
+function textoPrazo(b){
+  if(b.apartado) return '✔️ Apartado em ' + br(b.dataApartado);
+  const r = diasEntre(hojeISO(), b.apartar);
+  if(r > 1) return 'Faltam ' + r + ' dias para apartar';
+  if(r === 1) return '⚠️ Apartar AMANHÃ';
+  if(r === 0) return '⚠️ Apartar HOJE!';
+  return '🔴 Passou ' + plural(-r,'dia','dias') + ' da data';
+}
+
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function rotulo(b){ return 'Nº ' + esc(b.brinco) + (b.nome ? ' (' + esc(b.nome) + ')' : ''); }
+
+/* ---------- Tela principal ---------- */
+function render(){
+  const hoje = hojeISO();
+  const d = new Date();
+  document.getElementById('hojeTxt').textContent = 'Hoje é ' + DIAS_SEMANA[d.getDay()] + ', ' + d.getDate() + ' de ' + MESES[d.getMonth()] + ' de ' + d.getFullYear();
+  document.getElementById('rotPerto').textContent = '⚠️ Apartar nos próximos ' + cfg.diasAviso + ' dias';
+
+  const ativos = bezerros.filter(b => !b.apartado);
+  const cont = {ativos: ativos.length, perto:0, atrasados:0, apartados: bezerros.length - ativos.length};
+  ativos.forEach(b => { const s = situacao(b); if(s==='perto') cont.perto++; if(s==='atrasado') cont.atrasados++; });
+  document.getElementById('cAtivos').textContent = cont.ativos;
+  document.getElementById('cPerto').textContent = cont.perto;
+  document.getElementById('cAtrasados').textContent = cont.atrasados;
+  document.getElementById('cApartados').textContent = cont.apartados;
+  document.querySelectorAll('.resumo button').forEach(btn => btn.classList.toggle('ativo', btn.dataset.filtro === filtro));
+
+  const titulos = {ativos:'Bezerros no pé da vaca', perto:'Perto de apartar', atrasados:'Passou da data de apartar', apartados:'Já apartados', todos:'Todos os bezerros'};
+  document.getElementById('tituloLista').textContent = titulos[filtro];
+
+  let lista = bezerros.filter(b => {
+    const s = situacao(b);
+    if(filtro==='ativos') return s !== 'apartado';
+    if(filtro==='perto') return s === 'perto';
+    if(filtro==='atrasados') return s === 'atrasado';
+    if(filtro==='apartados') return s === 'apartado';
+    return true;
+  });
+  const q = document.getElementById('busca').value.trim().toLowerCase();
+  if(q) lista = lista.filter(b => [b.brinco,b.nome,b.mae].some(v => String(v||'').toLowerCase().includes(q)));
+
+  lista.sort((a,b) => {
+    if(!!a.apartado !== !!b.apartado) return a.apartado ? 1 : -1;
+    if(a.apartado) return (b.dataApartado||'').localeCompare(a.dataApartado||'');
+    return a.apartar.localeCompare(b.apartar);
+  });
+
+  const el = document.getElementById('lista');
+  if(!lista.length){
+    el.innerHTML = '<div class="vazio">' + (bezerros.length
+      ? 'Nenhum bezerro aqui.'
+      : 'Nenhum bezerro cadastrado ainda.<br><br><button class="btn grande verde" onclick="abrirForm()">➕ Cadastrar o primeiro bezerro</button>') + '</div>';
+  } else {
+    el.innerHTML = lista.map(b => {
+      const s = situacao(b);
+      return `<article class="card st-${s}">
+        <div class="card-topo"><span class="brinco">Nº ${esc(b.brinco)}</span>${b.nome ? `<span class="nome">${esc(b.nome)}</span>` : ''}</div>
+        <div class="prazo">${textoPrazo(b)}</div>
+        <div class="info">
+          <div><b>Sexo:</b> ${esc(b.sexo)}</div>
+          ${b.mae ? `<div><b>Mãe:</b> ${esc(b.mae)}</div>` : ''}
+          <div><b>Nasceu:</b> ${br(b.nasc)} <span style="color:#555">(${idade(b.nasc)})</span></div>
+          <div><b>Apartar em:</b> ${br(b.apartar)}</div>
+          ${b.obs ? `<div class="obs">📝 ${esc(b.obs)}</div>` : ''}
+        </div>
+        <div class="botoes">
+          ${b.apartado
+            ? `<button class="btn branco" onclick="desfazerApartado('${b.id}')">↩️ Desfazer</button>`
+            : `<button class="btn verde" onclick="marcarApartado('${b.id}')">✅ Já apartei</button>`}
+          <button class="btn branco" onclick="abrirForm('${b.id}')">✏️ Editar</button>
+          <button class="btn contorno-vermelho" onclick="excluir('${b.id}')">🗑️ Excluir</button>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  const precisaBackup = bezerros.length > 0 && (!cfg.ultimoBackup || diasEntre(cfg.ultimoBackup, hoje) > 30);
+  document.getElementById('avisoBackup').classList.toggle('hidden', !precisaBackup);
+}
+
+function mudarFiltro(f){ filtro = f; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+function salvarTudo(){ gravar(CHAVE, bezerros); render(); }
+
+/* ---------- Janelas ---------- */
+function abrir(id){ document.getElementById(id).classList.remove('hidden'); }
+function fechar(id){ document.getElementById(id).classList.add('hidden'); }
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm'].some(id => {
+    const j = document.getElementById(id); if(!j.classList.contains('hidden')){ fechar(id); return true; } return false;
+  });
+});
+function perguntar(titulo, texto, textoOk, acao, perigo){
+  document.getElementById('confTitulo').textContent = titulo;
+  document.getElementById('confTexto').innerHTML = texto;
+  const ok = document.getElementById('confOk');
+  ok.textContent = textoOk;
+  ok.className = 'btn grande ' + (perigo ? 'vermelho' : 'verde');
+  ok.onclick = () => { fechar('jConfirma'); acao(); };
+  abrir('jConfirma');
+}
+
+/* ---------- Alerta ao abrir ---------- */
+function mostrarAlerta(){
+  const urgentes = bezerros.filter(b => ['perto','atrasado'].includes(situacao(b))).sort((a,b) => a.apartar.localeCompare(b.apartar));
+  if(!urgentes.length) return;
+  document.getElementById('listaAlerta').innerHTML = urgentes.map(b => {
+    const s = situacao(b);
+    return `<li class="a-${s}"><b>${rotulo(b)}</b>${b.mae ? ' — mãe ' + esc(b.mae) : ''}<br>Apartar em ${br(b.apartar)} — <b>${textoPrazo(b)}</b></li>`;
+  }).join('');
+  abrir('jAlerta');
+}
+
+/* ---------- Cadastro ---------- */
+function abrirForm(id){
+  editandoId = id || null;
+  const b = id ? bezerros.find(x => x.id === id) : null;
+  document.getElementById('tituloForm').textContent = b ? 'Editar bezerro Nº ' + b.brinco : 'Cadastrar bezerro';
+  document.getElementById('erroForm').classList.add('hidden');
+  document.getElementById('fBrinco').value = b ? b.brinco : '';
+  document.getElementById('fNome').value = b ? (b.nome||'') : '';
+  document.getElementById('fMae').value = b ? (b.mae||'') : '';
+  document.querySelectorAll('input[name=sexo]').forEach(r => r.checked = (r.value === (b ? b.sexo : 'Macho')));
+  const nasc = b ? b.nasc : hojeISO();
+  document.getElementById('fNasc').value = nasc;
+  document.getElementById('fApartar').value = b ? b.apartar : somarDias(nasc, cfg.diasApartar);
+  apartarManual = !!b;
+  document.getElementById('blocoApartado').classList.toggle('hidden', !b);
+  document.getElementById('fApartadoChk').checked = !!(b && b.apartado);
+  document.getElementById('fApartadoData').value = (b && b.dataApartado) || hojeISO();
+  document.getElementById('campoDataApartado').classList.toggle('hidden', !(b && b.apartado));
+  document.getElementById('fObs').value = b ? (b.obs||'') : '';
+  atualizaDicaApartar();
+  abrir('jForm');
+  setTimeout(() => document.getElementById('fBrinco').focus(), 50);
+}
+function nascMudou(){
+  const nasc = document.getElementById('fNasc').value;
+  if(nasc && !apartarManual) document.getElementById('fApartar').value = somarDias(nasc, cfg.diasApartar);
+  atualizaDicaApartar();
+}
+function atualizaDicaApartar(){
+  document.getElementById('dicaApartar').innerHTML = 'Calculado: ' + cfg.diasApartar + ' dias (± ' + emMeses(cfg.diasApartar) + ' meses) depois do nascimento. ' +
+    '<a href="#" onclick="apartarManual=false;nascMudou();return false;">Recalcular</a>';
+}
+function erroForm(msg){ const e = document.getElementById('erroForm'); e.textContent = '⚠️ ' + msg; e.classList.remove('hidden'); e.scrollIntoView({block:'center'}); }
+
+function salvarForm(){
+  const brinco = document.getElementById('fBrinco').value.trim();
+  const nasc = document.getElementById('fNasc').value;
+  const apartar = document.getElementById('fApartar').value;
+  if(!brinco) return erroForm('Coloque o número ou brinco do bezerro.');
+  if(!nasc) return erroForm('Coloque o dia em que o bezerro nasceu.');
+  if(!apartar) return erroForm('Coloque o dia para apartar.');
+  if(apartar < nasc) return erroForm('O dia de apartar não pode ser antes do nascimento.');
+  const duplicado = bezerros.find(x => x.id !== editandoId && !x.apartado && x.brinco.toLowerCase() === brinco.toLowerCase());
+  if(duplicado) return erroForm('Já existe um bezerro no pé da vaca com o número ' + brinco + '.');
+
+  const apartadoChk = editandoId && document.getElementById('fApartadoChk').checked;
+  const dados = {
+    brinco,
+    nome: document.getElementById('fNome').value.trim(),
+    mae: document.getElementById('fMae').value.trim(),
+    sexo: document.querySelector('input[name=sexo]:checked').value,
+    nasc, apartar,
+    obs: document.getElementById('fObs').value.trim(),
+    apartado: !!apartadoChk,
+    dataApartado: apartadoChk ? (document.getElementById('fApartadoData').value || hojeISO()) : null
+  };
+  if(editandoId){
+    Object.assign(bezerros.find(x => x.id === editandoId), dados);
+  } else {
+    dados.id = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    dados.criadoEm = hojeISO();
+    bezerros.push(dados);
+  }
+  fechar('jForm');
+  salvarTudo();
+}
+
+function marcarApartado(id){
+  const b = bezerros.find(x => x.id === id);
+  perguntar('Apartar bezerro', 'Confirmar que o bezerro <b>' + rotulo(b) + '</b> foi apartado hoje?', '✅ Sim, apartei', () => {
+    b.apartado = true; b.dataApartado = hojeISO(); salvarTudo();
+  });
+}
+function desfazerApartado(id){
+  const b = bezerros.find(x => x.id === id);
+  perguntar('Desfazer', 'Voltar o bezerro <b>' + rotulo(b) + '</b> para a lista dos que estão no pé da vaca?', 'Sim, voltar', () => {
+    b.apartado = false; b.dataApartado = null; salvarTudo();
+  });
+}
+function excluir(id){
+  const b = bezerros.find(x => x.id === id);
+  perguntar('🗑️ Excluir bezerro', 'Tem certeza que quer <b>apagar</b> o bezerro <b>' + rotulo(b) + '</b>?<br>Isso não pode ser desfeito.', 'Sim, apagar', () => {
+    bezerros = bezerros.filter(x => x.id !== id); salvarTudo();
+  }, true);
+}
+
+/* ---------- Configurações ---------- */
+function abrirConfig(){
+  document.getElementById('cfgDias').value = cfg.diasApartar;
+  document.getElementById('cfgAviso').value = cfg.diasAviso;
+  atualizaDicaCfg();
+  abrir('jConfig');
+}
+function atualizaDicaCfg(){
+  const v = parseInt(document.getElementById('cfgDias').value, 10);
+  document.getElementById('dicaCfg').textContent = v > 0 ? 'Isso dá mais ou menos ' + emMeses(v) + ' meses.' : '';
+}
+function salvarConfig(){
+  const d = parseInt(document.getElementById('cfgDias').value, 10);
+  const a = parseInt(document.getElementById('cfgAviso').value, 10);
+  if(!(d >= 30 && d <= 400)) return alert('Coloque um número de dias entre 30 e 400.');
+  if(!(a >= 1 && a <= 120)) return alert('Coloque um aviso entre 1 e 120 dias.');
+  cfg.diasApartar = d; cfg.diasAviso = a;
+  gravar(CHAVE_CFG, cfg);
+  fechar('jConfig');
+  render();
+}
+
+/* ---------- Cópia de segurança ---------- */
+function exportar(){
+  const dados = {programa:'controle-bezerros', versao:1, salvoEm:new Date().toISOString(),
+    config:{diasApartar:cfg.diasApartar, diasAviso:cfg.diasAviso}, bezerros};
+  const blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'copia-bezerros-' + hojeISO() + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  cfg.ultimoBackup = hojeISO(); gravar(CHAVE_CFG, cfg); render();
+  perguntar('💾 Cópia feita', 'A cópia foi salva na pasta <b>Downloads</b> com o nome <b>' + a.download + '</b>.<br><br>Guarde esse arquivo num pendrive ou mande para o seu e-mail.', 'Entendi', () => {});
+  document.querySelector('#jConfirma .acoes .branco').classList.add('hidden');
+  const reexibe = () => document.querySelector('#jConfirma .acoes .branco').classList.remove('hidden');
+  document.getElementById('confOk').addEventListener('click', reexibe, {once:true});
+}
+function importar(input){
+  const arq = input.files[0]; input.value = '';
+  if(!arq) return;
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    let d;
+    try { d = JSON.parse(leitor.result); } catch(e){ return alert('Esse arquivo não é uma cópia válida do Controle de Bezerros.'); }
+    const lista = Array.isArray(d) ? d : d && d.bezerros;
+    const valido = Array.isArray(lista) && lista.every(b => b && b.brinco && /^\d{4}-\d{2}-\d{2}$/.test(b.nasc) && /^\d{4}-\d{2}-\d{2}$/.test(b.apartar));
+    if(!valido) return alert('Esse arquivo não é uma cópia válida do Controle de Bezerros.');
+    perguntar('📂 Recuperar cópia', 'O arquivo tem <b>' + lista.length + '</b> bezerros.<br>Os dados atuais (' + bezerros.length + ' bezerros) serão <b>trocados</b> por esses. Continuar?', 'Sim, recuperar', () => {
+      bezerros = lista.map(b => Object.assign({id: Date.now().toString(36)+Math.random().toString(36).slice(2,7), sexo:'Macho'}, b));
+      if(d.config){ cfg.diasApartar = d.config.diasApartar || cfg.diasApartar; cfg.diasAviso = d.config.diasAviso || cfg.diasAviso; gravar(CHAVE_CFG, cfg); }
+      salvarTudo();
+      mostrarAlerta();
+    }, true);
+  };
+  leitor.readAsText(arq);
+}
+
+/* ---------- Impressão ---------- */
+function imprimir(){
+  const lista = bezerros.filter(b => !b.apartado).sort((a,b) => a.apartar.localeCompare(b.apartar));
+  const nomes = {ok:'No prazo', perto:'Perto de apartar', atrasado:'Passou da data'};
+  document.getElementById('impressao').innerHTML =
+    '<h2>Bezerros no pé da vaca — ' + br(hojeISO()) + '</h2>' +
+    (lista.length ? '<table><thead><tr><th>Nº</th><th>Nome</th><th>Mãe</th><th>Sexo</th><th>Nasceu</th><th>Idade</th><th>Apartar em</th><th>Situação</th></tr></thead><tbody>' +
+      lista.map(b => `<tr><td>${esc(b.brinco)}</td><td>${esc(b.nome)}</td><td>${esc(b.mae)}</td><td>${esc(b.sexo)}</td><td>${br(b.nasc)}</td><td>${idade(b.nasc)}</td><td>${br(b.apartar)}</td><td>${nomes[situacao(b)]}</td></tr>`).join('') +
+      '</tbody></table>' : '<p>Nenhum bezerro no pé da vaca.</p>');
+  window.print();
+}
+
+render();
+mostrarAlerta();
+</script>
+</body>
+</html>
