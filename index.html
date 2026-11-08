@@ -332,6 +332,143 @@ let sb = null;
 /** Quem está logado, ou null. */
 let dono = null;
 
+/* ============================================================
+   NUVEM — sincronização
+   ============================================================
+   O navegador continua sendo a verdade da tela. A nuvem é a cópia que
+   sobrevive a celular perdido e cache limpo. Nada aqui bloqueia o uso:
+   se falhar, o dono nem percebe e tenta de novo depois.
+============================================================ */
+
+/** Situação para mostrar na tela: 'desligado' | 'guardando' | 'guardado' | 'pendente'. */
+let situacaoNuvem = 'desligado';
+let sincronizando = false;
+
+/* A parte visual entra no próximo passo; por ora só guarda o estado,
+   para a sincronização já nascer dizendo em que pé está. */
+function marcarSituacao(s){ situacaoNuvem = s; }
+
+/* Datas vêm em formatos diferentes dos dois lados: o navegador manda
+   "...789Z", o Postgres devolve "...789+00:00". Comparar como texto daria
+   resultado errado — tem que virar número. */
+const instante = v => Date.parse(v || 0) || 0;
+
+/** Registro do navegador → linha do banco. */
+function paraNuvem(b){
+  return {
+    id: b.id,
+    dono: dono.id,
+    brinco: b.brinco,
+    nome: b.nome || null,
+    mae: b.mae || null,
+    sexo: b.sexo || null,
+    obs: b.obs || null,
+    nasc: b.nasc,
+    apartar: b.apartar,
+    apartado: !!b.apartado,
+    data_apartado: b.dataApartado || null,
+    removido: !!b.removido,
+    atualizado_em: b.atualizadoEm,
+  };
+}
+
+/** Linha do banco → registro do navegador. */
+function daNuvem(r){
+  return {
+    id: r.id,
+    brinco: r.brinco,
+    nome: r.nome || '',
+    mae: r.mae || '',
+    sexo: r.sexo || 'Macho',
+    obs: r.obs || '',
+    nasc: r.nasc,
+    apartar: r.apartar,
+    apartado: !!r.apartado,
+    dataApartado: r.data_apartado || null,
+    removido: !!r.removido,
+    atualizadoEm: r.atualizado_em,
+  };
+}
+
+/**
+ * Junta o que está aqui com o que está lá.
+ *
+ * Baixa o rebanho INTEIRO a cada vez, em vez de perguntar "o que mudou
+ * desde tal hora". São algumas centenas de linhas — dezenas de KB — e em
+ * troca somem duas classes inteiras de bug: registro perdido porque o
+ * relógio do celular está atrasado, e registro perdido porque uma
+ * sincronização anterior falhou no meio. Toda vez é uma reconciliação
+ * completa, então qualquer buraco se fecha sozinho na próxima.
+ *
+ * Quando o mesmo bezerro mudou dos dois lados, vence o carimbo mais
+ * novo. É um dono só: isso só acontece se ele editar no celular sem
+ * sinal e no computador no mesmo intervalo.
+ */
+async function sincronizar(){
+  if(!sb || !dono || sincronizando) return;
+  if(!navigator.onLine){ marcarSituacao('pendente'); return; }
+
+  sincronizando = true;
+  marcarSituacao('guardando');
+  try {
+    const { data: remotos, error } = await sb.from('bezerros').select('*').eq('dono', dono.id);
+    if(error) throw error;
+
+    const naNuvem = new Map((remotos || []).map(r => [r.id, r]));
+
+    // O que está mais novo aqui (ou que a nuvem nem conhece) sobe.
+    const subir = bezerros
+      .filter(b => {
+        const r = naNuvem.get(b.id);
+        return !r || instante(b.atualizadoEm) > instante(r.atualizado_em);
+      })
+      .map(paraNuvem);
+
+    // O que está mais novo lá (ou que falta aqui) desce.
+    let mudou = false;
+    for(const r of (remotos || [])){
+      const b = bezerros.find(x => x.id === r.id);
+      if(!b){ bezerros.push(daNuvem(r)); mudou = true; }
+      else if(instante(r.atualizado_em) > instante(b.atualizadoEm)){
+        Object.assign(b, daNuvem(r)); mudou = true;
+      }
+    }
+
+    if(subir.length){
+      // Em lotes: um rebanho grande numa requisição só pode estourar o
+      // limite de tamanho, e aí nada sobe.
+      for(let i = 0; i < subir.length; i += 200){
+        const { error: erroSubida } = await sb.from('bezerros')
+          .upsert(subir.slice(i, i + 200), { onConflict: 'dono,id' });
+        if(erroSubida) throw erroSubida;
+      }
+    }
+
+    if(mudou){ gravar(CHAVE, bezerros); render(); }
+
+    cfg.ultimaSync = new Date().toISOString();
+    gravar(CHAVE_CFG, cfg);
+    marcarSituacao('guardado');
+  } catch(e){
+    // Falhar aqui é normal: sinal fraco, projeto dormindo, token vencido.
+    // Nada se perde — está tudo no navegador e sobe na próxima tentativa.
+    console.warn('[nuvem] não deu para guardar agora:', e && e.message);
+    marcarSituacao('pendente');
+  } finally {
+    sincronizando = false;
+  }
+}
+
+/* Alterações em sequência (cadastrar três bezerros seguidos) viram uma
+   subida só, alguns segundos depois da última. */
+let agendada = null;
+function agendarSincronizacao(){
+  if(!sb || !dono) return;
+  marcarSituacao('pendente');
+  clearTimeout(agendada);
+  agendada = setTimeout(sincronizar, 2000);
+}
+
 /* ---------- Nuvem: entrar e sair ---------- */
 
 /** Mostra o botão certo: "Entrar" para quem não está logado, "Sair" com
@@ -381,6 +518,11 @@ async function entrar(){
     dono = data.user;
     fechar('jEntrar');
     atualizarBotaoConta();
+    /* Primeira coisa depois de entrar: juntar o que está no aparelho com
+       o que está na nuvem. É este passo que traz o rebanho de volta num
+       celular novo — e que sobe, pela primeira vez, o que já existia
+       neste aqui. */
+    sincronizar();
   } catch(e){
     erroEntrar('Não foi possível entrar agora. Confira a internet e tente de novo.');
   } finally {
@@ -412,7 +554,12 @@ function iniciarNuvem(){
   sb.auth.getSession().then(({ data }) => {
     dono = data.session ? data.session.user : null;
     atualizarBotaoConta();
+    if(dono) sincronizar();
   }).catch(() => atualizarBotaoConta());
+
+  /* Voltou o sinal: sobe o que ficou pendente. É o caso de quem cadastrou
+     a manhã inteira no pasto e só pega rede ao chegar na sede. */
+  window.addEventListener('online', sincronizar);
 
   /* A sessão também pode cair sozinha (token expirado sem internet para
      renovar). O botão precisa refletir isso sem a página recarregar. */
@@ -569,7 +716,7 @@ function render(){
 }
 
 function mudarFiltro(f){ filtro = f; render(); window.scrollTo({top:0, behavior:'smooth'}); }
-function salvarTudo(){ gravar(CHAVE, bezerros); render(); }
+function salvarTudo(){ gravar(CHAVE, bezerros); render(); agendarSincronizacao(); }
 
 /* ---------- Janelas ---------- */
 function abrir(id){ document.getElementById(id).classList.remove('hidden'); }
