@@ -145,24 +145,29 @@ create policy bezerros_apaga on public.bezerros
 -- não junto dos bezerros, porque é ajuste da fazenda inteira — e porque
 -- quando ele abrir num aparelho novo, o sistema precisa já vir com o
 -- padrão dele, não com 210 dias de fábrica.
+--
+-- O nome é `bezerros_config`, e não `config`, porque este banco é
+-- compartilhado com o CRM da Flypi — 22 tabelas de outro sistema no
+-- mesmo lugar. "config" ali dentro não responde "configuração do quê",
+-- e seria o primeiro nome que o CRM também ia querer um dia.
 -- ------------------------------------------------------------
-create table if not exists public.config (
+create table if not exists public.bezerros_config (
   dono          uuid primary key references auth.users (id) on delete cascade,
   dias_apartar  smallint not null default 210 check (dias_apartar between 1 and 1000),
   dias_aviso    smallint not null default 15  check (dias_aviso between 0 and 365),
   atualizado_em timestamptz not null default now()
 );
 
-alter table public.config enable row level security;
+alter table public.bezerros_config enable row level security;
 
-drop policy if exists config_le     on public.config;
-drop policy if exists config_grava  on public.config;
+drop policy if exists bezerros_config_le    on public.bezerros_config;
+drop policy if exists bezerros_config_grava on public.bezerros_config;
 
-create policy config_le on public.config
+create policy bezerros_config_le on public.bezerros_config
   for select to authenticated
   using (dono = auth.uid());
 
-create policy config_grava on public.config
+create policy bezerros_config_grava on public.bezerros_config
   for all to authenticated
   using (dono = auth.uid())
   with check (dono = auth.uid());
