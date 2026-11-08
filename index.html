@@ -166,6 +166,7 @@
     <button class="btn branco" onclick="document.getElementById('arqImportar').click()">📂 Recuperar cópia</button>
     <button class="btn branco" onclick="abrirConfig()">⚙️ Configurações</button>
     <button class="btn branco" onclick="abrir('jAjuda')">❓ Como usar</button>
+    <button class="btn branco hidden" id="btnConta" onclick="cliqueConta()"></button>
     <input type="file" id="arqImportar" accept=".json,application/json" class="hidden" onchange="importar(this)">
   </footer>
   <p class="credito">Desenvolvido por <a href="https://flypi.com.br" target="_blank" rel="noopener">Flypi Enterprise</a></p>
@@ -252,6 +253,25 @@
 </div>
 
 <!-- Confirmação -->
+<div class="fundo-janela hidden" id="jEntrar">
+  <div class="janela" role="dialog" aria-modal="true">
+    <h2>☁️ Entrar na conta</h2>
+    <p style="font-size:1.05rem;color:#555;margin-bottom:4px">
+      Entrando na conta, seus bezerros ficam guardados também na internet.
+      Se você trocar de celular ou limpar o navegador, eles voltam sozinhos.
+    </p>
+    <label for="eEmail">E-mail</label>
+    <input type="email" id="eEmail" autocomplete="username" inputmode="email" placeholder="seu@email.com">
+    <label for="eSenha">Senha</label>
+    <input type="password" id="eSenha" autocomplete="current-password" placeholder="sua senha">
+    <p id="eErro" class="hidden" style="color:#b00020;font-weight:600"></p>
+    <div class="acoes">
+      <button class="btn grande branco" onclick="fechar('jEntrar')">Cancelar</button>
+      <button class="btn grande verde" id="eOk" onclick="entrar()">Entrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="fundo-janela hidden" id="jConfirma">
   <div class="janela" role="dialog" aria-modal="true">
     <h2 id="confTitulo">Confirmar</h2>
@@ -312,6 +332,68 @@ let sb = null;
 /** Quem está logado, ou null. */
 let dono = null;
 
+/* ---------- Nuvem: entrar e sair ---------- */
+
+/** Mostra o botão certo: "Entrar" para quem não está logado, "Sair" com
+ *  o e-mail para quem está. Fica escondido quando não há nuvem. */
+function atualizarBotaoConta(){
+  const btn = document.getElementById('btnConta');
+  btn.classList.toggle('hidden', !nuvemDisponivel());
+  btn.textContent = dono ? '☁️ Sair (' + dono.email + ')' : '☁️ Entrar na conta';
+}
+
+function cliqueConta(){
+  if(!dono) return abrirEntrar();
+  perguntar('Sair da conta',
+    'Seus bezerros continuam neste aparelho.<br>Para guardá-los na internet de novo, é só entrar outra vez.',
+    'Sim, sair', sair);
+}
+
+function abrirEntrar(){
+  document.getElementById('eErro').classList.add('hidden');
+  document.getElementById('eSenha').value = '';
+  abrir('jEntrar');
+  document.getElementById('eEmail').focus();
+}
+
+function erroEntrar(msg){
+  const el = document.getElementById('eErro');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function entrar(){
+  const email = document.getElementById('eEmail').value.trim();
+  const senha = document.getElementById('eSenha').value;
+  if(!email || !senha) return erroEntrar('Preencha o e-mail e a senha.');
+
+  const botao = document.getElementById('eOk');
+  botao.disabled = true; botao.textContent = 'Entrando…';
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if(error){
+      // A mensagem da biblioteca vem em inglês e fala de "credentials".
+      // Quem usa isto não precisa saber o que é isso.
+      return erroEntrar(/Invalid login/i.test(error.message)
+        ? 'E-mail ou senha errados.'
+        : 'Não foi possível entrar agora. Confira a internet e tente de novo.');
+    }
+    dono = data.user;
+    fechar('jEntrar');
+    atualizarBotaoConta();
+  } catch(e){
+    erroEntrar('Não foi possível entrar agora. Confira a internet e tente de novo.');
+  } finally {
+    botao.disabled = false; botao.textContent = 'Entrar';
+  }
+}
+
+async function sair(){
+  try { await sb.auth.signOut(); } catch(e){ /* sem internet: a sessão local sai do mesmo jeito */ }
+  dono = null;
+  atualizarBotaoConta();
+}
+
 function iniciarNuvem(){
   if(!nuvemDisponivel()) return;
   sb = window.supabase.createClient(NUVEM.url, NUVEM.chave, {
@@ -323,6 +405,23 @@ function iniciarNuvem(){
       autoRefreshToken: true,
     },
   });
+
+  /* Recupera a sessão que já estava salva neste aparelho. É o caminho
+     normal: o dono entra uma vez e nas próximas aberturas já chega
+     logado, sem ver tela de senha. */
+  sb.auth.getSession().then(({ data }) => {
+    dono = data.session ? data.session.user : null;
+    atualizarBotaoConta();
+  }).catch(() => atualizarBotaoConta());
+
+  /* A sessão também pode cair sozinha (token expirado sem internet para
+     renovar). O botão precisa refletir isso sem a página recarregar. */
+  sb.auth.onAuthStateChange((_evento, sessao) => {
+    dono = sessao ? sessao.user : null;
+    atualizarBotaoConta();
+  });
+
+  atualizarBotaoConta();
 }
 
 function carregar(chave, padrao){
@@ -476,7 +575,7 @@ function salvarTudo(){ gravar(CHAVE, bezerros); render(); }
 function abrir(id){ document.getElementById(id).classList.remove('hidden'); }
 function fechar(id){ document.getElementById(id).classList.add('hidden'); }
 document.addEventListener('keydown', e => {
-  if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm'].some(id => {
+  if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm','jEntrar'].some(id => {
     const j = document.getElementById(id); if(!j.classList.contains('hidden')){ fechar(id); return true; } return false;
   });
 });
