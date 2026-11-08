@@ -315,8 +315,11 @@ const CHAVE_CFG = 'controleBezerros_config_v1';
    Nunca coloque aqui a chave `service_role`: essa ignora as regras.
 ============================================================ */
 const NUVEM = {
-  url: '',
-  chave: '',
+  // Projeto DB FLYPI 2.0 — o mesmo do CRM da Flypi. Os bezerros ficam em
+  // tabelas próprias (`bezerros`, `bezerros_config`), e a regra de acesso
+  // do banco garante que cada um só enxerga o que é seu.
+  url: 'https://dajkjsbkjzgimadqjbga.supabase.co',
+  chave: 'sb_publishable_y5SzK4jsE1XcKRx_71OMyA_tot0NG7j',
 };
 
 /** Endereço da biblioteca do Supabase. Só é baixada se a nuvem estiver
