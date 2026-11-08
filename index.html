@@ -38,6 +38,14 @@
   .topo h1{margin:0;font-size:1.8rem}
   .topo p{margin:4px 0 0;font-size:1.05rem;opacity:.9}
 
+  /* Selo de situação da nuvem. Discreto: é tranquilizador quando está
+     tudo certo e precisa chamar atenção só quando falta guardar. */
+  .nuvem{display:inline-flex;align-items:center;gap:8px;font-size:.95rem;font-weight:600;
+         padding:6px 14px;border-radius:999px;border:2px solid transparent}
+  .nuvem.guardado{background:#e4f3e4;color:#1d5c1d;border-color:#9bcf9b}
+  .nuvem.guardando{background:#eef1f5;color:#44506b;border-color:#c3cbd9}
+  .nuvem.pendente{background:#fff3cd;color:#7a5900;border-color:#e0b400}
+
   main{max-width:1150px;margin:0 auto;padding:16px}
 
   .btn{font-size:1rem;font-family:inherit;padding:12px 20px;border-radius:12px;border:2px solid transparent;cursor:pointer;font-weight:600;line-height:1.2}
@@ -140,6 +148,8 @@
 </header>
 
 <main>
+  <p id="seloNuvem" class="nuvem hidden" style="margin:0 0 16px"></p>
+
   <div id="avisoBackup" class="faixa hidden">
     <span>💾 Faz tempo que não é feita uma <b>cópia de segurança</b> dos dados.</span>
     <button class="btn verde" onclick="exportar()">Fazer cópia agora</button>
@@ -344,9 +354,44 @@ let dono = null;
 let situacaoNuvem = 'desligado';
 let sincronizando = false;
 
-/* A parte visual entra no próximo passo; por ora só guarda o estado,
-   para a sincronização já nascer dizendo em que pé está. */
-function marcarSituacao(s){ situacaoNuvem = s; }
+/* Em quantos minutos/horas foi a última vez. "há 2 horas" diz mais do
+   que um horário que a pessoa precisa comparar com o relógio. */
+function desdeQuando(iso){
+  if(!iso) return '';
+  const min = Math.floor((Date.now() - Date.parse(iso)) / 60000);
+  if(min < 1)  return 'agora mesmo';
+  if(min < 60) return 'há ' + plural(min, 'minuto', 'minutos');
+  const h = Math.floor(min / 60);
+  if(h < 24)   return 'há ' + plural(h, 'hora', 'horas');
+  return 'em ' + br(iso.slice(0, 10));
+}
+
+/**
+ * Atualiza o selo de situação.
+ *
+ * Texto sem jargão: ninguém precisa saber o que é "sincronizar". O que o
+ * dono quer saber é uma coisa só — "meus bezerros estão guardados?".
+ */
+function marcarSituacao(s){
+  situacaoNuvem = s;
+  const el = document.getElementById('seloNuvem');
+  if(!el) return;
+
+  // Sem nuvem ou sem login, o selo nem aparece: prometer guardar sem
+  // estar guardando seria pior do que não dizer nada.
+  if(!sb || !dono){ el.className = 'nuvem hidden'; return; }
+
+  const textos = {
+    guardando: ['guardando', '⏳ Guardando na internet…'],
+    guardado:  ['guardado',  '☁️ Guardado na internet ' + desdeQuando(cfg.ultimaSync)],
+    pendente:  ['pendente',  navigator.onLine
+                  ? '⚠️ Falta guardar na internet — vamos tentar de novo'
+                  : '📵 Sem internet — vai guardar assim que voltar o sinal'],
+  };
+  const [classe, texto] = textos[s] || textos.pendente;
+  el.className = 'nuvem ' + classe;
+  el.textContent = texto;
+}
 
 /* Datas vêm em formatos diferentes dos dois lados: o navegador manda
    "...789Z", o Postgres devolve "...789+00:00". Comparar como texto daria
@@ -477,6 +522,7 @@ function atualizarBotaoConta(){
   const btn = document.getElementById('btnConta');
   btn.classList.toggle('hidden', !nuvemDisponivel());
   btn.textContent = dono ? '☁️ Sair (' + dono.email + ')' : '☁️ Entrar na conta';
+  marcarSituacao(situacaoNuvem);
 }
 
 function cliqueConta(){
@@ -537,7 +583,11 @@ async function sair(){
 }
 
 function iniciarNuvem(){
-  if(!nuvemDisponivel()) return;
+  // Pode ser chamada mais de uma vez (no `load`, e de novo se a
+  // biblioteca chegar atrasada). Criar um segundo cliente deixaria dois
+  // ouvintes de sessão ativos, e cada troca de login dispararia tudo em
+  // duplicidade.
+  if(sb || !nuvemDisponivel()) return;
   sb = window.supabase.createClient(NUVEM.url, NUVEM.chave, {
     auth: {
       // O dono loga uma vez por aparelho e não é deslogado sozinho.
@@ -912,6 +962,10 @@ function imprimir(){
    página terminou de carregar. Por isso a nuvem inicia aqui, e não
    junto do resto: antes disso `window.supabase` ainda não existe. */
 window.addEventListener('load', iniciarNuvem);
+
+/* O "há 5 minutos" precisa envelhecer sozinho; sem isto ficaria
+   congelado em "agora mesmo" enquanto a tela estiver aberta. */
+setInterval(() => { if(situacaoNuvem === 'guardado') marcarSituacao('guardado'); }, 60000);
 
 render();
 mostrarAlerta();
