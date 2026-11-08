@@ -295,15 +295,6 @@
 
 <div id="impressao"></div>
 
-<!--
-  Biblioteca do Supabase.
-
-  `defer` de propósito: a página não espera por ela. Se o dono abrir o
-  sistema sem sinal — que é o caso normal no pasto — este arquivo não
-  carrega, e o sistema precisa funcionar do mesmo jeito. Todo o código
-  da nuvem confere se a biblioteca chegou antes de usar.
--->
-<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
 
 <script>
 const CHAVE = 'controleBezerros_dados_v1';
@@ -328,10 +319,37 @@ const NUVEM = {
   chave: '',
 };
 
+/** Endereço da biblioteca do Supabase. Só é baixada se a nuvem estiver
+ *  configurada — ver `carregarBiblioteca()`. */
+const BIBLIOTECA = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js';
+
 /** A nuvem só entra em cena se estiver configurada E se a biblioteca
  *  tiver carregado (ela não carrega sem internet). */
 function nuvemDisponivel(){
   return !!(NUVEM.url && NUVEM.chave && window.supabase);
+}
+
+/**
+ * Baixa a biblioteca do Supabase, e só quando há nuvem configurada.
+ *
+ * Numa tag fixa no HTML, estes ~100 KB seriam baixados em toda abertura
+ * mesmo por quem não usa a nuvem — e, sem sinal, seriam um pedido que
+ * falha toda vez à toa. Quem está no pasto não deve pagar por um
+ * recurso que não está usando.
+ *
+ * Nunca rejeita: falhar aqui é o caso normal de quem está sem sinal, e
+ * o sistema inteiro continua funcionando sem ela.
+ */
+function carregarBiblioteca(){
+  return new Promise(pronto => {
+    if(!NUVEM.url || !NUVEM.chave) return pronto(false);
+    if(window.supabase) return pronto(true);
+    const tag = document.createElement('script');
+    tag.src = BIBLIOTECA;
+    tag.onload  = () => pronto(true);
+    tag.onerror = () => pronto(false);
+    document.head.appendChild(tag);
+  });
 }
 
 /** Cliente do Supabase. Fica nulo quando a nuvem não está disponível —
@@ -958,10 +976,10 @@ function imprimir(){
   window.print();
 }
 
-/* A biblioteca da nuvem tem `defer`, então só existe depois que a
-   página terminou de carregar. Por isso a nuvem inicia aqui, e não
-   junto do resto: antes disso `window.supabase` ainda não existe. */
-window.addEventListener('load', iniciarNuvem);
+/* Busca a biblioteca e só então liga a nuvem. Se não vier — sem sinal,
+   ou nuvem não configurada — nada acontece, e é esse o estado normal de
+   quem está no pasto. */
+carregarBiblioteca().then(veio => { if(veio) iniciarNuvem(); });
 
 /* O "há 5 minutos" precisa envelhecer sozinho; sem isto ficaria
    congelado em "agora mesmo" enquanto a tela estiver aberta. */
