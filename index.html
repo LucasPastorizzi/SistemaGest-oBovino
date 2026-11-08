@@ -275,8 +275,13 @@
     <label for="eSenha">Senha</label>
     <input type="password" id="eSenha" autocomplete="current-password" placeholder="sua senha">
     <p id="eErro" class="hidden" style="color:#b00020;font-weight:600"></p>
+    <p id="eSemNet" class="hidden" style="font-size:1rem;color:#7a5900;background:#fff3cd;
+       border:2px solid #e0b400;border-radius:12px;padding:10px 14px">
+      📵 Sem internet agora. Você precisa entrar uma vez para ativar o sistema —
+      tente de novo quando pegar sinal.
+    </p>
     <div class="acoes">
-      <button class="btn grande branco" onclick="fechar('jEntrar')">Cancelar</button>
+      <button class="btn grande branco" id="eCancelar" onclick="fechar('jEntrar')">Cancelar</button>
       <button class="btn grande verde" id="eOk" onclick="entrar()">Entrar</button>
     </div>
   </div>
@@ -299,6 +304,9 @@
 <script>
 const CHAVE = 'controleBezerros_dados_v1';
 const CHAVE_CFG = 'controleBezerros_config_v1';
+/* Se o dono já entrou na conta alguma vez NESTE aparelho. Decide se o
+   login é obrigatório: pedimos na primeira vez, nunca mais depois. */
+const CHAVE_ENTROU = 'controleBezerros_entrou_v1';
 
 /* ============================================================
    NUVEM — configuração
@@ -547,17 +555,46 @@ function atualizarBotaoConta(){
 }
 
 function cliqueConta(){
-  if(!dono) return abrirEntrar();
+  if(!dono) return abrirEntrar(false);
   perguntar('Sair da conta',
     'Seus bezerros continuam neste aparelho.<br>Para guardá-los na internet de novo, é só entrar outra vez.',
     'Sim, sair', sair);
 }
 
-function abrirEntrar(){
+/** Já entrou alguma vez neste aparelho? */
+const jaEntrou = () => localStorage.getItem(CHAVE_ENTROU) === 'sim';
+
+/**
+ * Login obrigatório, mas só na primeira vez.
+ *
+ * Sem isto, o botão de entrar no rodapé é fácil de nunca notar — e um
+ * dono que nunca entra não tem cópia nenhuma na internet, que é
+ * exatamente o problema que o banco veio resolver.
+ *
+ * Depois da primeira vez, nunca mais barra. Se a sessão cair (token
+ * vencido, semanas sem sinal), ele entra e usa normalmente: os bezerros
+ * estão no aparelho, e trancar alguém do lado de fora dos próprios
+ * dados no meio do curral é pior do que ficar um tempo sem guardar.
+ */
+function portaoObrigatorio(){
+  return nuvemDisponivel() && !dono && !jaEntrou();
+}
+
+function abrirEntrar(obrigatorio){
   document.getElementById('eErro').classList.add('hidden');
+  document.getElementById('eSemNet').classList.toggle('hidden', navigator.onLine);
   document.getElementById('eSenha').value = '';
+  // Na primeira vez não há como escapar: sem Cancelar, sem Escape, sem
+  // clicar fora. Depois, é uma janela comum.
+  document.getElementById('eCancelar').classList.toggle('hidden', !!obrigatorio);
+  document.getElementById('jEntrar').dataset.obrigatorio = obrigatorio ? 'sim' : '';
   abrir('jEntrar');
   document.getElementById('eEmail').focus();
+}
+
+/** Mostra o portão se for o caso. Chamada quando a nuvem fica pronta. */
+function conferirPortao(){
+  if(portaoObrigatorio()) abrirEntrar(true);
 }
 
 function erroEntrar(msg){
@@ -583,6 +620,8 @@ async function entrar(){
         : 'Não foi possível entrar agora. Confira a internet e tente de novo.');
     }
     dono = data.user;
+    localStorage.setItem(CHAVE_ENTROU, 'sim');
+    document.getElementById('jEntrar').dataset.obrigatorio = '';
     fechar('jEntrar');
     atualizarBotaoConta();
     /* Primeira coisa depois de entrar: juntar o que está no aparelho com
@@ -624,9 +663,10 @@ function iniciarNuvem(){
      logado, sem ver tela de senha. */
   sb.auth.getSession().then(({ data }) => {
     dono = data.session ? data.session.user : null;
+    if(dono) localStorage.setItem(CHAVE_ENTROU, 'sim');
     atualizarBotaoConta();
-    if(dono) sincronizar();
-  }).catch(() => atualizarBotaoConta());
+    if(dono) sincronizar(); else conferirPortao();
+  }).catch(() => { atualizarBotaoConta(); conferirPortao(); });
 
   /* Voltou o sinal: sobe o que ficou pendente. É o caso de quem cadastrou
      a manhã inteira no pasto e só pega rede ao chegar na sede. */
@@ -791,9 +831,15 @@ function salvarTudo(){ gravar(CHAVE, bezerros); render(); agendarSincronizacao()
 
 /* ---------- Janelas ---------- */
 function abrir(id){ document.getElementById(id).classList.remove('hidden'); }
-function fechar(id){ document.getElementById(id).classList.add('hidden'); }
+function fechar(id){
+  // O portão da primeira entrada não fecha por clique fora nem por Escape.
+  const j = document.getElementById(id);
+  if(id === 'jEntrar' && j.dataset.obrigatorio) return;
+  j.classList.add('hidden');
+}
 document.addEventListener('keydown', e => {
   if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm','jEntrar'].some(id => {
+    if(id === 'jEntrar' && document.getElementById(id).dataset.obrigatorio) return false;
     const j = document.getElementById(id); if(!j.classList.contains('hidden')){ fechar(id); return true; } return false;
   });
 });
