@@ -278,8 +278,28 @@ function gravar(chave, valor){
   catch(e){ alert('Atenção: não foi possível salvar os dados neste computador. Faça uma cópia de segurança.'); return false; }
 }
 
+/* Carimbo de alteração.
+   Toda mudança num bezerro passa por aqui. É este horário que decide quem
+   vence quando o mesmo bezerro for alterado no celular e no computador, e
+   é por ele que a sincronização sabe o que ainda não subiu. */
+function tocar(b){ b.atualizadoEm = new Date().toISOString(); return b; }
+
+/* O rebanho como a tela enxerga: sem os removidos.
+   A lista crua `bezerros` continua com eles, porque a exclusão precisa
+   viajar até a nuvem. Tudo que é contagem, lista, aviso ou impressão
+   passa por aqui — assim nenhuma tela precisa lembrar da regra. */
+function vivos(){ return bezerros.filter(b => !b.removido); }
+
 let bezerros = carregar(CHAVE, []);
 if(!Array.isArray(bezerros)) bezerros = [];
+
+/* Registros criados antes do carimbo existir entram com uma data bem
+   antiga, e não com "agora": se entrassem como agora, todos pareceriam
+   recém-alterados e venceriam qualquer coisa que já estivesse na nuvem. */
+bezerros.forEach(b => {
+  if(!b.atualizadoEm) b.atualizadoEm = '1970-01-01T00:00:00.000Z';
+  if(b.removido === undefined) b.removido = false;
+});
 let cfg = Object.assign({diasApartar:210, diasAviso:15, ultimoBackup:null}, carregar(CHAVE_CFG, {}));
 let filtro = 'ativos';
 let editandoId = null;
@@ -331,8 +351,8 @@ function render(){
   document.getElementById('hojeTxt').textContent = 'Hoje é ' + DIAS_SEMANA[d.getDay()] + ', ' + d.getDate() + ' de ' + MESES[d.getMonth()] + ' de ' + d.getFullYear();
   document.getElementById('rotPerto').textContent = '⚠️ Apartar nos próximos ' + cfg.diasAviso + ' dias';
 
-  const ativos = bezerros.filter(b => !b.apartado);
-  const cont = {ativos: ativos.length, perto:0, atrasados:0, apartados: bezerros.length - ativos.length};
+  const ativos = vivos().filter(b => !b.apartado);
+  const cont = {ativos: ativos.length, perto:0, atrasados:0, apartados: vivos().length - ativos.length};
   ativos.forEach(b => { const s = situacao(b); if(s==='perto') cont.perto++; if(s==='atrasado') cont.atrasados++; });
   document.getElementById('cAtivos').textContent = cont.ativos;
   document.getElementById('cPerto').textContent = cont.perto;
@@ -343,7 +363,7 @@ function render(){
   const titulos = {ativos:'Bezerros no pé da vaca', perto:'Perto de apartar', atrasados:'Passou da data de apartar', apartados:'Já apartados', todos:'Todos os bezerros'};
   document.getElementById('tituloLista').textContent = titulos[filtro];
 
-  let lista = bezerros.filter(b => {
+  let lista = vivos().filter(b => {
     const s = situacao(b);
     if(filtro==='ativos') return s !== 'apartado';
     if(filtro==='perto') return s === 'perto';
@@ -362,7 +382,7 @@ function render(){
 
   const el = document.getElementById('lista');
   if(!lista.length){
-    el.innerHTML = '<div class="vazio">' + (bezerros.length
+    el.innerHTML = '<div class="vazio">' + (vivos().length
       ? 'Nenhum bezerro aqui.'
       : 'Nenhum bezerro cadastrado ainda.<br><br><button class="btn grande verde" onclick="abrirForm()">➕ Cadastrar o primeiro bezerro</button>') + '</div>';
   } else {
@@ -389,7 +409,7 @@ function render(){
     }).join('');
   }
 
-  const precisaBackup = bezerros.length > 0 && (!cfg.ultimoBackup || diasEntre(cfg.ultimoBackup, hoje) > 30);
+  const precisaBackup = vivos().length > 0 && (!cfg.ultimoBackup || diasEntre(cfg.ultimoBackup, hoje) > 30);
   document.getElementById('avisoBackup').classList.toggle('hidden', !precisaBackup);
 }
 
@@ -416,7 +436,7 @@ function perguntar(titulo, texto, textoOk, acao, perigo){
 
 /* ---------- Alerta ao abrir ---------- */
 function mostrarAlerta(){
-  const urgentes = bezerros.filter(b => ['perto','atrasado'].includes(situacao(b))).sort((a,b) => a.apartar.localeCompare(b.apartar));
+  const urgentes = vivos().filter(b => ['perto','atrasado'].includes(situacao(b))).sort((a,b) => a.apartar.localeCompare(b.apartar));
   if(!urgentes.length) return;
   document.getElementById('listaAlerta').innerHTML = urgentes.map(b => {
     const s = situacao(b);
@@ -467,7 +487,7 @@ function salvarForm(){
   if(!nasc) return erroForm('Coloque o dia em que o bezerro nasceu.');
   if(!apartar) return erroForm('Coloque o dia para apartar.');
   if(apartar < nasc) return erroForm('O dia de apartar não pode ser antes do nascimento.');
-  const duplicado = bezerros.find(x => x.id !== editandoId && !x.apartado && x.brinco.toLowerCase() === brinco.toLowerCase());
+  const duplicado = vivos().find(x => x.id !== editandoId && !x.apartado && x.brinco.toLowerCase() === brinco.toLowerCase());
   if(duplicado) return erroForm('Já existe um bezerro no pé da vaca com o número ' + brinco + '.');
 
   const apartadoChk = editandoId && document.getElementById('fApartadoChk').checked;
@@ -482,11 +502,12 @@ function salvarForm(){
     dataApartado: apartadoChk ? (document.getElementById('fApartadoData').value || hojeISO()) : null
   };
   if(editandoId){
-    Object.assign(bezerros.find(x => x.id === editandoId), dados);
+    tocar(Object.assign(bezerros.find(x => x.id === editandoId), dados));
   } else {
     dados.id = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
     dados.criadoEm = hojeISO();
-    bezerros.push(dados);
+    dados.removido = false;
+    bezerros.push(tocar(dados));
   }
   fechar('jForm');
   salvarTudo();
@@ -495,19 +516,23 @@ function salvarForm(){
 function marcarApartado(id){
   const b = bezerros.find(x => x.id === id);
   perguntar('Apartar bezerro', 'Confirmar que o bezerro <b>' + rotulo(b) + '</b> foi apartado hoje?', '✅ Sim, apartei', () => {
-    b.apartado = true; b.dataApartado = hojeISO(); salvarTudo();
+    b.apartado = true; b.dataApartado = hojeISO(); tocar(b); salvarTudo();
   });
 }
 function desfazerApartado(id){
   const b = bezerros.find(x => x.id === id);
   perguntar('Desfazer', 'Voltar o bezerro <b>' + rotulo(b) + '</b> para a lista dos que estão no pé da vaca?', 'Sim, voltar', () => {
-    b.apartado = false; b.dataApartado = null; salvarTudo();
+    b.apartado = false; b.dataApartado = null; tocar(b); salvarTudo();
   });
 }
 function excluir(id){
   const b = bezerros.find(x => x.id === id);
   perguntar('🗑️ Excluir bezerro', 'Tem certeza que quer <b>apagar</b> o bezerro <b>' + rotulo(b) + '</b>?<br>Isso não pode ser desfeito.', 'Sim, apagar', () => {
-    bezerros = bezerros.filter(x => x.id !== id); salvarTudo();
+    /* Marca em vez de apagar. Sem isso, a sincronização baixaria o
+       bezerro de volta do servidor na próxima vez — ele "ressuscitaria".
+       Some da tela do mesmo jeito; a linha fica só para a exclusão
+       conseguir viajar até a nuvem. */
+    tocar(b); b.removido = true; salvarTudo();
   }, true);
 }
 
@@ -536,7 +561,7 @@ function salvarConfig(){
 /* ---------- Cópia de segurança ---------- */
 function exportar(){
   const dados = {programa:'controle-bezerros', versao:1, salvoEm:new Date().toISOString(),
-    config:{diasApartar:cfg.diasApartar, diasAviso:cfg.diasAviso}, bezerros};
+    config:{diasApartar:cfg.diasApartar, diasAviso:cfg.diasAviso}, bezerros: vivos()};
   const blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -559,7 +584,7 @@ function importar(input){
     const lista = Array.isArray(d) ? d : d && d.bezerros;
     const valido = Array.isArray(lista) && lista.every(b => b && b.brinco && /^\d{4}-\d{2}-\d{2}$/.test(b.nasc) && /^\d{4}-\d{2}-\d{2}$/.test(b.apartar));
     if(!valido) return alert('Esse arquivo não é uma cópia válida do Controle de Bezerros.');
-    perguntar('📂 Recuperar cópia', 'O arquivo tem <b>' + lista.length + '</b> bezerros.<br>Os dados atuais (' + bezerros.length + ' bezerros) serão <b>trocados</b> por esses. Continuar?', 'Sim, recuperar', () => {
+    perguntar('📂 Recuperar cópia', 'O arquivo tem <b>' + lista.length + '</b> bezerros.<br>Os dados atuais (' + vivos().length + ' bezerros) serão <b>trocados</b> por esses. Continuar?', 'Sim, recuperar', () => {
       bezerros = lista.map(b => Object.assign({id: Date.now().toString(36)+Math.random().toString(36).slice(2,7), sexo:'Macho'}, b));
       if(d.config){ cfg.diasApartar = d.config.diasApartar || cfg.diasApartar; cfg.diasAviso = d.config.diasAviso || cfg.diasAviso; gravar(CHAVE_CFG, cfg); }
       salvarTudo();
@@ -571,7 +596,7 @@ function importar(input){
 
 /* ---------- Impressão ---------- */
 function imprimir(){
-  const lista = bezerros.filter(b => !b.apartado).sort((a,b) => a.apartar.localeCompare(b.apartar));
+  const lista = vivos().filter(b => !b.apartado).sort((a,b) => a.apartar.localeCompare(b.apartar));
   const nomes = {ok:'No prazo', perto:'Perto de apartar', atrasado:'Passou da data'};
   document.getElementById('impressao').innerHTML =
     '<h2>Bezerros no pé da vaca — ' + br(hojeISO()) + '</h2>' +
