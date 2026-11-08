@@ -265,9 +265,65 @@
 
 <div id="impressao"></div>
 
+<!--
+  Biblioteca do Supabase.
+
+  `defer` de propósito: a página não espera por ela. Se o dono abrir o
+  sistema sem sinal — que é o caso normal no pasto — este arquivo não
+  carrega, e o sistema precisa funcionar do mesmo jeito. Todo o código
+  da nuvem confere se a biblioteca chegou antes de usar.
+-->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
+
 <script>
 const CHAVE = 'controleBezerros_dados_v1';
 const CHAVE_CFG = 'controleBezerros_config_v1';
+
+/* ============================================================
+   NUVEM — configuração
+   ============================================================
+   Preencha os dois valores abaixo com os dados do projeto no Supabase
+   (Painel → Project Settings → API). Enquanto estiverem vazios, o
+   sistema funciona exatamente como antes: tudo no navegador, sem login
+   e sem nenhum botão a mais na tela.
+
+   A chave pode ficar aqui à vista. Ela é a chave PÚBLICA (anon), feita
+   para aparecer no código de sites. Quem protege os dados é a regra de
+   acesso no banco (RLS), que só devolve os bezerros do dono logado —
+   sem login, toda consulta volta vazia, mesmo com a chave em mãos.
+   Nunca coloque aqui a chave `service_role`: essa ignora as regras.
+============================================================ */
+const NUVEM = {
+  url: '',
+  chave: '',
+};
+
+/** A nuvem só entra em cena se estiver configurada E se a biblioteca
+ *  tiver carregado (ela não carrega sem internet). */
+function nuvemDisponivel(){
+  return !!(NUVEM.url && NUVEM.chave && window.supabase);
+}
+
+/** Cliente do Supabase. Fica nulo quando a nuvem não está disponível —
+ *  e todo o resto do código trata esse caso como normal, não como erro:
+ *  é o estado de quem está no pasto sem sinal. */
+let sb = null;
+
+/** Quem está logado, ou null. */
+let dono = null;
+
+function iniciarNuvem(){
+  if(!nuvemDisponivel()) return;
+  sb = window.supabase.createClient(NUVEM.url, NUVEM.chave, {
+    auth: {
+      // O dono loga uma vez por aparelho e não é deslogado sozinho.
+      // Pedir senha de novo no meio do curral é o tipo de atrito que
+      // faz um sistema ser abandonado.
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+}
 
 function carregar(chave, padrao){
   try { const v = localStorage.getItem(chave); return v ? JSON.parse(v) : padrao; }
@@ -605,6 +661,11 @@ function imprimir(){
       '</tbody></table>' : '<p>Nenhum bezerro no pé da vaca.</p>');
   window.print();
 }
+
+/* A biblioteca da nuvem tem `defer`, então só existe depois que a
+   página terminou de carregar. Por isso a nuvem inicia aqui, e não
+   junto do resto: antes disso `window.supabase` ainda não existe. */
+window.addEventListener('load', iniciarNuvem);
 
 render();
 mostrarAlerta();
