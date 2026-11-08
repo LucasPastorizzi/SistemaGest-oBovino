@@ -18,13 +18,66 @@ Feito para ser fácil de usar: letras grandes, botões claros e cores que mostra
 
 ## Como funciona
 
-É um site estático: um único `index.html`, sem servidor e sem banco de dados. Os dados ficam salvos no navegador de quem usa (localStorage), por isso a cópia de segurança é importante.
+É um site estático: um único `index.html`, sem build e sem framework.
+
+**Os dados vivem no navegador** (localStorage). É isso que faz o sistema abrir e
+funcionar no pasto, sem sinal — e continua sendo assim.
+
+**E agora também na internet**, quando o dono entra na conta. A cópia na nuvem
+existe porque o navegador sozinho perde tudo em situações comuns: limpar o
+cache, trocar de celular, perder o celular, ou passar tempo demais sem abrir (o
+Safari do iPhone descarta sozinho). Não é questão de espaço — cabem uns 20 mil
+bezerros no navegador.
+
+A regra é: **o navegador manda na tela, a nuvem é a cópia que sobrevive.** Nada
+depende de internet para funcionar; quando há sinal, os dois lados se acertam.
+
+### A sincronização
+
+A cada sincronização o sistema baixa o rebanho inteiro e junta com o que está no
+aparelho: o que está mais novo aqui sobe, o que está mais novo lá desce. Quando o
+mesmo bezerro mudou dos dois lados, vence a alteração mais recente.
+
+Acontece ao abrir, ao entrar na conta, alguns segundos depois de cada alteração,
+e quando o sinal volta. Se falhar, não acontece nada visível — os dados estão no
+aparelho e sobem na próxima tentativa.
+
+Bezerro excluído é **marcado**, não apagado: sem isso ele voltaria do servidor na
+sincronização seguinte.
+
+## Ligar a nuvem
+
+Enquanto não for configurada, o sistema roda só no navegador, sem login e sem
+nenhum botão a mais — igual ao que sempre foi.
+
+1. Criar um projeto no [Supabase](https://supabase.com) (região `sa-east-1`).
+2. SQL Editor → New query → colar `supabase/migrations/20261108120000_bezerros.sql`
+   → Run.
+3. Authentication → Users → Add user: criar a conta do dono com e-mail e senha.
+4. Em `index.html`, preencher o bloco `NUVEM` com a URL e a chave pública do
+   projeto (Project Settings → API).
+5. Cadastrar os secrets `SUPABASE_URL` e `SUPABASE_CHAVE` no GitHub
+   (Settings → Secrets and variables → Actions), para o job que mantém o banco
+   acordado.
+
+A chave pública pode ficar à vista no HTML — ela é feita para isso. Quem protege
+os dados é a regra de acesso do banco (RLS), que só devolve os bezerros do dono
+logado. **Nunca** colocar ali a chave `service_role`.
+
+### Se o dono já usa o sistema
+
+A ordem importa. Ligar a nuvem **antes** de qualquer mudança de endereço: ele
+entra na conta e o que está no celular sobe sozinho na primeira sincronização.
+Só depois disso vale trocar o domínio — os dados do localStorage ficam presos ao
+endereço antigo, e sem a nuvem no meio a troca começaria com o sistema vazio.
 
 ## Arquivos
 
 | Arquivo | Para que serve |
 |---|---|
 | `index.html` | O sistema completo |
+| `supabase/migrations/` | O SQL do banco (tabelas e permissões) |
+| `.github/workflows/` | Job que impede o banco gratuito de dormir |
 | `favicon.svg` / `favicon.ico` | Ícone da aba do navegador |
 | `apple-touch-icon.png` | Ícone ao salvar na tela do celular |
 | `og-image.png` | Imagem da prévia ao compartilhar o link (WhatsApp etc.) |
@@ -32,6 +85,11 @@ Feito para ser fácil de usar: letras grandes, botões claros e cores que mostra
 ## Publicação
 
 Hospedado na Vercel. Qualquer alteração enviada para a branch `main` é publicada automaticamente.
+
+O projeto gratuito do Supabase é pausado depois de alguns dias sem uso, e o dono
+passa semanas sem abrir fora da época de parição. O job em
+`.github/workflows/manter-banco-acordado.yml` faz uma consulta a cada três dias
+para evitar isso.
 
 ---
 

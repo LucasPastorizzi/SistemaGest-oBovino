@@ -38,6 +38,14 @@
   .topo h1{margin:0;font-size:1.8rem}
   .topo p{margin:4px 0 0;font-size:1.05rem;opacity:.9}
 
+  /* Selo de situação da nuvem. Discreto: é tranquilizador quando está
+     tudo certo e precisa chamar atenção só quando falta guardar. */
+  .nuvem{display:inline-flex;align-items:center;gap:8px;font-size:.95rem;font-weight:600;
+         padding:6px 14px;border-radius:999px;border:2px solid transparent}
+  .nuvem.guardado{background:#e4f3e4;color:#1d5c1d;border-color:#9bcf9b}
+  .nuvem.guardando{background:#eef1f5;color:#44506b;border-color:#c3cbd9}
+  .nuvem.pendente{background:#fff3cd;color:#7a5900;border-color:#e0b400}
+
   main{max-width:1150px;margin:0 auto;padding:16px}
 
   .btn{font-size:1rem;font-family:inherit;padding:12px 20px;border-radius:12px;border:2px solid transparent;cursor:pointer;font-weight:600;line-height:1.2}
@@ -140,6 +148,8 @@
 </header>
 
 <main>
+  <p id="seloNuvem" class="nuvem hidden" style="margin:0 0 16px"></p>
+
   <div id="avisoBackup" class="faixa hidden">
     <span>💾 Faz tempo que não é feita uma <b>cópia de segurança</b> dos dados.</span>
     <button class="btn verde" onclick="exportar()">Fazer cópia agora</button>
@@ -166,6 +176,7 @@
     <button class="btn branco" onclick="document.getElementById('arqImportar').click()">📂 Recuperar cópia</button>
     <button class="btn branco" onclick="abrirConfig()">⚙️ Configurações</button>
     <button class="btn branco" onclick="abrir('jAjuda')">❓ Como usar</button>
+    <button class="btn branco hidden" id="btnConta" onclick="cliqueConta()"></button>
     <input type="file" id="arqImportar" accept=".json,application/json" class="hidden" onchange="importar(this)">
   </footer>
   <p class="credito">Desenvolvido por <a href="https://flypi.com.br" target="_blank" rel="noopener">Flypi Enterprise</a></p>
@@ -252,6 +263,25 @@
 </div>
 
 <!-- Confirmação -->
+<div class="fundo-janela hidden" id="jEntrar">
+  <div class="janela" role="dialog" aria-modal="true">
+    <h2>☁️ Entrar na conta</h2>
+    <p style="font-size:1.05rem;color:#555;margin-bottom:4px">
+      Entrando na conta, seus bezerros ficam guardados também na internet.
+      Se você trocar de celular ou limpar o navegador, eles voltam sozinhos.
+    </p>
+    <label for="eEmail">E-mail</label>
+    <input type="email" id="eEmail" autocomplete="username" inputmode="email" placeholder="seu@email.com">
+    <label for="eSenha">Senha</label>
+    <input type="password" id="eSenha" autocomplete="current-password" placeholder="sua senha">
+    <p id="eErro" class="hidden" style="color:#b00020;font-weight:600"></p>
+    <div class="acoes">
+      <button class="btn grande branco" onclick="fechar('jEntrar')">Cancelar</button>
+      <button class="btn grande verde" id="eOk" onclick="entrar()">Entrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="fundo-janela hidden" id="jConfirma">
   <div class="janela" role="dialog" aria-modal="true">
     <h2 id="confTitulo">Confirmar</h2>
@@ -265,9 +295,349 @@
 
 <div id="impressao"></div>
 
+
 <script>
 const CHAVE = 'controleBezerros_dados_v1';
 const CHAVE_CFG = 'controleBezerros_config_v1';
+
+/* ============================================================
+   NUVEM — configuração
+   ============================================================
+   Preencha os dois valores abaixo com os dados do projeto no Supabase
+   (Painel → Project Settings → API). Enquanto estiverem vazios, o
+   sistema funciona exatamente como antes: tudo no navegador, sem login
+   e sem nenhum botão a mais na tela.
+
+   A chave pode ficar aqui à vista. Ela é a chave PÚBLICA (anon), feita
+   para aparecer no código de sites. Quem protege os dados é a regra de
+   acesso no banco (RLS), que só devolve os bezerros do dono logado —
+   sem login, toda consulta volta vazia, mesmo com a chave em mãos.
+   Nunca coloque aqui a chave `service_role`: essa ignora as regras.
+============================================================ */
+const NUVEM = {
+  url: '',
+  chave: '',
+};
+
+/** Endereço da biblioteca do Supabase. Só é baixada se a nuvem estiver
+ *  configurada — ver `carregarBiblioteca()`. */
+const BIBLIOTECA = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js';
+
+/** A nuvem só entra em cena se estiver configurada E se a biblioteca
+ *  tiver carregado (ela não carrega sem internet). */
+function nuvemDisponivel(){
+  return !!(NUVEM.url && NUVEM.chave && window.supabase);
+}
+
+/**
+ * Baixa a biblioteca do Supabase, e só quando há nuvem configurada.
+ *
+ * Numa tag fixa no HTML, estes ~100 KB seriam baixados em toda abertura
+ * mesmo por quem não usa a nuvem — e, sem sinal, seriam um pedido que
+ * falha toda vez à toa. Quem está no pasto não deve pagar por um
+ * recurso que não está usando.
+ *
+ * Nunca rejeita: falhar aqui é o caso normal de quem está sem sinal, e
+ * o sistema inteiro continua funcionando sem ela.
+ */
+function carregarBiblioteca(){
+  return new Promise(pronto => {
+    if(!NUVEM.url || !NUVEM.chave) return pronto(false);
+    if(window.supabase) return pronto(true);
+    const tag = document.createElement('script');
+    tag.src = BIBLIOTECA;
+    tag.onload  = () => pronto(true);
+    tag.onerror = () => pronto(false);
+    document.head.appendChild(tag);
+  });
+}
+
+/** Cliente do Supabase. Fica nulo quando a nuvem não está disponível —
+ *  e todo o resto do código trata esse caso como normal, não como erro:
+ *  é o estado de quem está no pasto sem sinal. */
+let sb = null;
+
+/** Quem está logado, ou null. */
+let dono = null;
+
+/* ============================================================
+   NUVEM — sincronização
+   ============================================================
+   O navegador continua sendo a verdade da tela. A nuvem é a cópia que
+   sobrevive a celular perdido e cache limpo. Nada aqui bloqueia o uso:
+   se falhar, o dono nem percebe e tenta de novo depois.
+============================================================ */
+
+/** Situação para mostrar na tela: 'desligado' | 'guardando' | 'guardado' | 'pendente'. */
+let situacaoNuvem = 'desligado';
+let sincronizando = false;
+
+/* Em quantos minutos/horas foi a última vez. "há 2 horas" diz mais do
+   que um horário que a pessoa precisa comparar com o relógio. */
+function desdeQuando(iso){
+  if(!iso) return '';
+  const min = Math.floor((Date.now() - Date.parse(iso)) / 60000);
+  if(min < 1)  return 'agora mesmo';
+  if(min < 60) return 'há ' + plural(min, 'minuto', 'minutos');
+  const h = Math.floor(min / 60);
+  if(h < 24)   return 'há ' + plural(h, 'hora', 'horas');
+  return 'em ' + br(iso.slice(0, 10));
+}
+
+/**
+ * Atualiza o selo de situação.
+ *
+ * Texto sem jargão: ninguém precisa saber o que é "sincronizar". O que o
+ * dono quer saber é uma coisa só — "meus bezerros estão guardados?".
+ */
+function marcarSituacao(s){
+  situacaoNuvem = s;
+  const el = document.getElementById('seloNuvem');
+  if(!el) return;
+
+  // Sem nuvem ou sem login, o selo nem aparece: prometer guardar sem
+  // estar guardando seria pior do que não dizer nada.
+  if(!sb || !dono){ el.className = 'nuvem hidden'; return; }
+
+  const textos = {
+    guardando: ['guardando', '⏳ Guardando na internet…'],
+    guardado:  ['guardado',  '☁️ Guardado na internet ' + desdeQuando(cfg.ultimaSync)],
+    pendente:  ['pendente',  navigator.onLine
+                  ? '⚠️ Falta guardar na internet — vamos tentar de novo'
+                  : '📵 Sem internet — vai guardar assim que voltar o sinal'],
+  };
+  const [classe, texto] = textos[s] || textos.pendente;
+  el.className = 'nuvem ' + classe;
+  el.textContent = texto;
+}
+
+/* Datas vêm em formatos diferentes dos dois lados: o navegador manda
+   "...789Z", o Postgres devolve "...789+00:00". Comparar como texto daria
+   resultado errado — tem que virar número. */
+const instante = v => Date.parse(v || 0) || 0;
+
+/** Registro do navegador → linha do banco. */
+function paraNuvem(b){
+  return {
+    id: b.id,
+    dono: dono.id,
+    brinco: b.brinco,
+    nome: b.nome || null,
+    mae: b.mae || null,
+    sexo: b.sexo || null,
+    obs: b.obs || null,
+    nasc: b.nasc,
+    apartar: b.apartar,
+    apartado: !!b.apartado,
+    data_apartado: b.dataApartado || null,
+    removido: !!b.removido,
+    atualizado_em: b.atualizadoEm,
+  };
+}
+
+/** Linha do banco → registro do navegador. */
+function daNuvem(r){
+  return {
+    id: r.id,
+    brinco: r.brinco,
+    nome: r.nome || '',
+    mae: r.mae || '',
+    sexo: r.sexo || 'Macho',
+    obs: r.obs || '',
+    nasc: r.nasc,
+    apartar: r.apartar,
+    apartado: !!r.apartado,
+    dataApartado: r.data_apartado || null,
+    removido: !!r.removido,
+    atualizadoEm: r.atualizado_em,
+  };
+}
+
+/**
+ * Junta o que está aqui com o que está lá.
+ *
+ * Baixa o rebanho INTEIRO a cada vez, em vez de perguntar "o que mudou
+ * desde tal hora". São algumas centenas de linhas — dezenas de KB — e em
+ * troca somem duas classes inteiras de bug: registro perdido porque o
+ * relógio do celular está atrasado, e registro perdido porque uma
+ * sincronização anterior falhou no meio. Toda vez é uma reconciliação
+ * completa, então qualquer buraco se fecha sozinho na próxima.
+ *
+ * Quando o mesmo bezerro mudou dos dois lados, vence o carimbo mais
+ * novo. É um dono só: isso só acontece se ele editar no celular sem
+ * sinal e no computador no mesmo intervalo.
+ */
+async function sincronizar(){
+  if(!sb || !dono || sincronizando) return;
+  if(!navigator.onLine){ marcarSituacao('pendente'); return; }
+
+  sincronizando = true;
+  marcarSituacao('guardando');
+  try {
+    const { data: remotos, error } = await sb.from('bezerros').select('*').eq('dono', dono.id);
+    if(error) throw error;
+
+    const naNuvem = new Map((remotos || []).map(r => [r.id, r]));
+
+    // O que está mais novo aqui (ou que a nuvem nem conhece) sobe.
+    const subir = bezerros
+      .filter(b => {
+        const r = naNuvem.get(b.id);
+        return !r || instante(b.atualizadoEm) > instante(r.atualizado_em);
+      })
+      .map(paraNuvem);
+
+    // O que está mais novo lá (ou que falta aqui) desce.
+    let mudou = false;
+    for(const r of (remotos || [])){
+      const b = bezerros.find(x => x.id === r.id);
+      if(!b){ bezerros.push(daNuvem(r)); mudou = true; }
+      else if(instante(r.atualizado_em) > instante(b.atualizadoEm)){
+        Object.assign(b, daNuvem(r)); mudou = true;
+      }
+    }
+
+    if(subir.length){
+      // Em lotes: um rebanho grande numa requisição só pode estourar o
+      // limite de tamanho, e aí nada sobe.
+      for(let i = 0; i < subir.length; i += 200){
+        const { error: erroSubida } = await sb.from('bezerros')
+          .upsert(subir.slice(i, i + 200), { onConflict: 'dono,id' });
+        if(erroSubida) throw erroSubida;
+      }
+    }
+
+    if(mudou){ gravar(CHAVE, bezerros); render(); }
+
+    cfg.ultimaSync = new Date().toISOString();
+    gravar(CHAVE_CFG, cfg);
+    marcarSituacao('guardado');
+  } catch(e){
+    // Falhar aqui é normal: sinal fraco, projeto dormindo, token vencido.
+    // Nada se perde — está tudo no navegador e sobe na próxima tentativa.
+    console.warn('[nuvem] não deu para guardar agora:', e && e.message);
+    marcarSituacao('pendente');
+  } finally {
+    sincronizando = false;
+  }
+}
+
+/* Alterações em sequência (cadastrar três bezerros seguidos) viram uma
+   subida só, alguns segundos depois da última. */
+let agendada = null;
+function agendarSincronizacao(){
+  if(!sb || !dono) return;
+  marcarSituacao('pendente');
+  clearTimeout(agendada);
+  agendada = setTimeout(sincronizar, 2000);
+}
+
+/* ---------- Nuvem: entrar e sair ---------- */
+
+/** Mostra o botão certo: "Entrar" para quem não está logado, "Sair" com
+ *  o e-mail para quem está. Fica escondido quando não há nuvem. */
+function atualizarBotaoConta(){
+  const btn = document.getElementById('btnConta');
+  btn.classList.toggle('hidden', !nuvemDisponivel());
+  btn.textContent = dono ? '☁️ Sair (' + dono.email + ')' : '☁️ Entrar na conta';
+  marcarSituacao(situacaoNuvem);
+}
+
+function cliqueConta(){
+  if(!dono) return abrirEntrar();
+  perguntar('Sair da conta',
+    'Seus bezerros continuam neste aparelho.<br>Para guardá-los na internet de novo, é só entrar outra vez.',
+    'Sim, sair', sair);
+}
+
+function abrirEntrar(){
+  document.getElementById('eErro').classList.add('hidden');
+  document.getElementById('eSenha').value = '';
+  abrir('jEntrar');
+  document.getElementById('eEmail').focus();
+}
+
+function erroEntrar(msg){
+  const el = document.getElementById('eErro');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function entrar(){
+  const email = document.getElementById('eEmail').value.trim();
+  const senha = document.getElementById('eSenha').value;
+  if(!email || !senha) return erroEntrar('Preencha o e-mail e a senha.');
+
+  const botao = document.getElementById('eOk');
+  botao.disabled = true; botao.textContent = 'Entrando…';
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if(error){
+      // A mensagem da biblioteca vem em inglês e fala de "credentials".
+      // Quem usa isto não precisa saber o que é isso.
+      return erroEntrar(/Invalid login/i.test(error.message)
+        ? 'E-mail ou senha errados.'
+        : 'Não foi possível entrar agora. Confira a internet e tente de novo.');
+    }
+    dono = data.user;
+    fechar('jEntrar');
+    atualizarBotaoConta();
+    /* Primeira coisa depois de entrar: juntar o que está no aparelho com
+       o que está na nuvem. É este passo que traz o rebanho de volta num
+       celular novo — e que sobe, pela primeira vez, o que já existia
+       neste aqui. */
+    sincronizar();
+  } catch(e){
+    erroEntrar('Não foi possível entrar agora. Confira a internet e tente de novo.');
+  } finally {
+    botao.disabled = false; botao.textContent = 'Entrar';
+  }
+}
+
+async function sair(){
+  try { await sb.auth.signOut(); } catch(e){ /* sem internet: a sessão local sai do mesmo jeito */ }
+  dono = null;
+  atualizarBotaoConta();
+}
+
+function iniciarNuvem(){
+  // Pode ser chamada mais de uma vez (no `load`, e de novo se a
+  // biblioteca chegar atrasada). Criar um segundo cliente deixaria dois
+  // ouvintes de sessão ativos, e cada troca de login dispararia tudo em
+  // duplicidade.
+  if(sb || !nuvemDisponivel()) return;
+  sb = window.supabase.createClient(NUVEM.url, NUVEM.chave, {
+    auth: {
+      // O dono loga uma vez por aparelho e não é deslogado sozinho.
+      // Pedir senha de novo no meio do curral é o tipo de atrito que
+      // faz um sistema ser abandonado.
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+
+  /* Recupera a sessão que já estava salva neste aparelho. É o caminho
+     normal: o dono entra uma vez e nas próximas aberturas já chega
+     logado, sem ver tela de senha. */
+  sb.auth.getSession().then(({ data }) => {
+    dono = data.session ? data.session.user : null;
+    atualizarBotaoConta();
+    if(dono) sincronizar();
+  }).catch(() => atualizarBotaoConta());
+
+  /* Voltou o sinal: sobe o que ficou pendente. É o caso de quem cadastrou
+     a manhã inteira no pasto e só pega rede ao chegar na sede. */
+  window.addEventListener('online', sincronizar);
+
+  /* A sessão também pode cair sozinha (token expirado sem internet para
+     renovar). O botão precisa refletir isso sem a página recarregar. */
+  sb.auth.onAuthStateChange((_evento, sessao) => {
+    dono = sessao ? sessao.user : null;
+    atualizarBotaoConta();
+  });
+
+  atualizarBotaoConta();
+}
 
 function carregar(chave, padrao){
   try { const v = localStorage.getItem(chave); return v ? JSON.parse(v) : padrao; }
@@ -278,8 +648,28 @@ function gravar(chave, valor){
   catch(e){ alert('Atenção: não foi possível salvar os dados neste computador. Faça uma cópia de segurança.'); return false; }
 }
 
+/* Carimbo de alteração.
+   Toda mudança num bezerro passa por aqui. É este horário que decide quem
+   vence quando o mesmo bezerro for alterado no celular e no computador, e
+   é por ele que a sincronização sabe o que ainda não subiu. */
+function tocar(b){ b.atualizadoEm = new Date().toISOString(); return b; }
+
+/* O rebanho como a tela enxerga: sem os removidos.
+   A lista crua `bezerros` continua com eles, porque a exclusão precisa
+   viajar até a nuvem. Tudo que é contagem, lista, aviso ou impressão
+   passa por aqui — assim nenhuma tela precisa lembrar da regra. */
+function vivos(){ return bezerros.filter(b => !b.removido); }
+
 let bezerros = carregar(CHAVE, []);
 if(!Array.isArray(bezerros)) bezerros = [];
+
+/* Registros criados antes do carimbo existir entram com uma data bem
+   antiga, e não com "agora": se entrassem como agora, todos pareceriam
+   recém-alterados e venceriam qualquer coisa que já estivesse na nuvem. */
+bezerros.forEach(b => {
+  if(!b.atualizadoEm) b.atualizadoEm = '1970-01-01T00:00:00.000Z';
+  if(b.removido === undefined) b.removido = false;
+});
 let cfg = Object.assign({diasApartar:210, diasAviso:15, ultimoBackup:null}, carregar(CHAVE_CFG, {}));
 let filtro = 'ativos';
 let editandoId = null;
@@ -331,8 +721,8 @@ function render(){
   document.getElementById('hojeTxt').textContent = 'Hoje é ' + DIAS_SEMANA[d.getDay()] + ', ' + d.getDate() + ' de ' + MESES[d.getMonth()] + ' de ' + d.getFullYear();
   document.getElementById('rotPerto').textContent = '⚠️ Apartar nos próximos ' + cfg.diasAviso + ' dias';
 
-  const ativos = bezerros.filter(b => !b.apartado);
-  const cont = {ativos: ativos.length, perto:0, atrasados:0, apartados: bezerros.length - ativos.length};
+  const ativos = vivos().filter(b => !b.apartado);
+  const cont = {ativos: ativos.length, perto:0, atrasados:0, apartados: vivos().length - ativos.length};
   ativos.forEach(b => { const s = situacao(b); if(s==='perto') cont.perto++; if(s==='atrasado') cont.atrasados++; });
   document.getElementById('cAtivos').textContent = cont.ativos;
   document.getElementById('cPerto').textContent = cont.perto;
@@ -343,7 +733,7 @@ function render(){
   const titulos = {ativos:'Bezerros no pé da vaca', perto:'Perto de apartar', atrasados:'Passou da data de apartar', apartados:'Já apartados', todos:'Todos os bezerros'};
   document.getElementById('tituloLista').textContent = titulos[filtro];
 
-  let lista = bezerros.filter(b => {
+  let lista = vivos().filter(b => {
     const s = situacao(b);
     if(filtro==='ativos') return s !== 'apartado';
     if(filtro==='perto') return s === 'perto';
@@ -362,7 +752,7 @@ function render(){
 
   const el = document.getElementById('lista');
   if(!lista.length){
-    el.innerHTML = '<div class="vazio">' + (bezerros.length
+    el.innerHTML = '<div class="vazio">' + (vivos().length
       ? 'Nenhum bezerro aqui.'
       : 'Nenhum bezerro cadastrado ainda.<br><br><button class="btn grande verde" onclick="abrirForm()">➕ Cadastrar o primeiro bezerro</button>') + '</div>';
   } else {
@@ -389,18 +779,18 @@ function render(){
     }).join('');
   }
 
-  const precisaBackup = bezerros.length > 0 && (!cfg.ultimoBackup || diasEntre(cfg.ultimoBackup, hoje) > 30);
+  const precisaBackup = vivos().length > 0 && (!cfg.ultimoBackup || diasEntre(cfg.ultimoBackup, hoje) > 30);
   document.getElementById('avisoBackup').classList.toggle('hidden', !precisaBackup);
 }
 
 function mudarFiltro(f){ filtro = f; render(); window.scrollTo({top:0, behavior:'smooth'}); }
-function salvarTudo(){ gravar(CHAVE, bezerros); render(); }
+function salvarTudo(){ gravar(CHAVE, bezerros); render(); agendarSincronizacao(); }
 
 /* ---------- Janelas ---------- */
 function abrir(id){ document.getElementById(id).classList.remove('hidden'); }
 function fechar(id){ document.getElementById(id).classList.add('hidden'); }
 document.addEventListener('keydown', e => {
-  if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm'].some(id => {
+  if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm','jEntrar'].some(id => {
     const j = document.getElementById(id); if(!j.classList.contains('hidden')){ fechar(id); return true; } return false;
   });
 });
@@ -416,7 +806,7 @@ function perguntar(titulo, texto, textoOk, acao, perigo){
 
 /* ---------- Alerta ao abrir ---------- */
 function mostrarAlerta(){
-  const urgentes = bezerros.filter(b => ['perto','atrasado'].includes(situacao(b))).sort((a,b) => a.apartar.localeCompare(b.apartar));
+  const urgentes = vivos().filter(b => ['perto','atrasado'].includes(situacao(b))).sort((a,b) => a.apartar.localeCompare(b.apartar));
   if(!urgentes.length) return;
   document.getElementById('listaAlerta').innerHTML = urgentes.map(b => {
     const s = situacao(b);
@@ -467,7 +857,7 @@ function salvarForm(){
   if(!nasc) return erroForm('Coloque o dia em que o bezerro nasceu.');
   if(!apartar) return erroForm('Coloque o dia para apartar.');
   if(apartar < nasc) return erroForm('O dia de apartar não pode ser antes do nascimento.');
-  const duplicado = bezerros.find(x => x.id !== editandoId && !x.apartado && x.brinco.toLowerCase() === brinco.toLowerCase());
+  const duplicado = vivos().find(x => x.id !== editandoId && !x.apartado && x.brinco.toLowerCase() === brinco.toLowerCase());
   if(duplicado) return erroForm('Já existe um bezerro no pé da vaca com o número ' + brinco + '.');
 
   const apartadoChk = editandoId && document.getElementById('fApartadoChk').checked;
@@ -482,11 +872,12 @@ function salvarForm(){
     dataApartado: apartadoChk ? (document.getElementById('fApartadoData').value || hojeISO()) : null
   };
   if(editandoId){
-    Object.assign(bezerros.find(x => x.id === editandoId), dados);
+    tocar(Object.assign(bezerros.find(x => x.id === editandoId), dados));
   } else {
     dados.id = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
     dados.criadoEm = hojeISO();
-    bezerros.push(dados);
+    dados.removido = false;
+    bezerros.push(tocar(dados));
   }
   fechar('jForm');
   salvarTudo();
@@ -495,19 +886,23 @@ function salvarForm(){
 function marcarApartado(id){
   const b = bezerros.find(x => x.id === id);
   perguntar('Apartar bezerro', 'Confirmar que o bezerro <b>' + rotulo(b) + '</b> foi apartado hoje?', '✅ Sim, apartei', () => {
-    b.apartado = true; b.dataApartado = hojeISO(); salvarTudo();
+    b.apartado = true; b.dataApartado = hojeISO(); tocar(b); salvarTudo();
   });
 }
 function desfazerApartado(id){
   const b = bezerros.find(x => x.id === id);
   perguntar('Desfazer', 'Voltar o bezerro <b>' + rotulo(b) + '</b> para a lista dos que estão no pé da vaca?', 'Sim, voltar', () => {
-    b.apartado = false; b.dataApartado = null; salvarTudo();
+    b.apartado = false; b.dataApartado = null; tocar(b); salvarTudo();
   });
 }
 function excluir(id){
   const b = bezerros.find(x => x.id === id);
   perguntar('🗑️ Excluir bezerro', 'Tem certeza que quer <b>apagar</b> o bezerro <b>' + rotulo(b) + '</b>?<br>Isso não pode ser desfeito.', 'Sim, apagar', () => {
-    bezerros = bezerros.filter(x => x.id !== id); salvarTudo();
+    /* Marca em vez de apagar. Sem isso, a sincronização baixaria o
+       bezerro de volta do servidor na próxima vez — ele "ressuscitaria".
+       Some da tela do mesmo jeito; a linha fica só para a exclusão
+       conseguir viajar até a nuvem. */
+    tocar(b); b.removido = true; salvarTudo();
   }, true);
 }
 
@@ -536,7 +931,7 @@ function salvarConfig(){
 /* ---------- Cópia de segurança ---------- */
 function exportar(){
   const dados = {programa:'controle-bezerros', versao:1, salvoEm:new Date().toISOString(),
-    config:{diasApartar:cfg.diasApartar, diasAviso:cfg.diasAviso}, bezerros};
+    config:{diasApartar:cfg.diasApartar, diasAviso:cfg.diasAviso}, bezerros: vivos()};
   const blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -559,7 +954,7 @@ function importar(input){
     const lista = Array.isArray(d) ? d : d && d.bezerros;
     const valido = Array.isArray(lista) && lista.every(b => b && b.brinco && /^\d{4}-\d{2}-\d{2}$/.test(b.nasc) && /^\d{4}-\d{2}-\d{2}$/.test(b.apartar));
     if(!valido) return alert('Esse arquivo não é uma cópia válida do Controle de Bezerros.');
-    perguntar('📂 Recuperar cópia', 'O arquivo tem <b>' + lista.length + '</b> bezerros.<br>Os dados atuais (' + bezerros.length + ' bezerros) serão <b>trocados</b> por esses. Continuar?', 'Sim, recuperar', () => {
+    perguntar('📂 Recuperar cópia', 'O arquivo tem <b>' + lista.length + '</b> bezerros.<br>Os dados atuais (' + vivos().length + ' bezerros) serão <b>trocados</b> por esses. Continuar?', 'Sim, recuperar', () => {
       bezerros = lista.map(b => Object.assign({id: Date.now().toString(36)+Math.random().toString(36).slice(2,7), sexo:'Macho'}, b));
       if(d.config){ cfg.diasApartar = d.config.diasApartar || cfg.diasApartar; cfg.diasAviso = d.config.diasAviso || cfg.diasAviso; gravar(CHAVE_CFG, cfg); }
       salvarTudo();
@@ -571,7 +966,7 @@ function importar(input){
 
 /* ---------- Impressão ---------- */
 function imprimir(){
-  const lista = bezerros.filter(b => !b.apartado).sort((a,b) => a.apartar.localeCompare(b.apartar));
+  const lista = vivos().filter(b => !b.apartado).sort((a,b) => a.apartar.localeCompare(b.apartar));
   const nomes = {ok:'No prazo', perto:'Perto de apartar', atrasado:'Passou da data'};
   document.getElementById('impressao').innerHTML =
     '<h2>Bezerros no pé da vaca — ' + br(hojeISO()) + '</h2>' +
@@ -580,6 +975,15 @@ function imprimir(){
       '</tbody></table>' : '<p>Nenhum bezerro no pé da vaca.</p>');
   window.print();
 }
+
+/* Busca a biblioteca e só então liga a nuvem. Se não vier — sem sinal,
+   ou nuvem não configurada — nada acontece, e é esse o estado normal de
+   quem está no pasto. */
+carregarBiblioteca().then(veio => { if(veio) iniciarNuvem(); });
+
+/* O "há 5 minutos" precisa envelhecer sozinho; sem isto ficaria
+   congelado em "agora mesmo" enquanto a tela estiver aberta. */
+setInterval(() => { if(situacaoNuvem === 'guardado') marcarSituacao('guardado'); }, 60000);
 
 render();
 mostrarAlerta();

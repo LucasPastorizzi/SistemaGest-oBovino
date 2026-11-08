@@ -1,0 +1,70 @@
+# Mantém o banco do Supabase acordado.
+#
+# POR QUE ISTO EXISTE
+#
+# Projeto gratuito do Supabase é pausado depois de alguns dias sem
+# nenhuma consulta. Pausado, ele não responde — e o sistema do dono para
+# de guardar na internet justamente quando ele volta a usar.
+#
+# O uso real não resolve: fora da época de parição, o dono passa semanas
+# sem abrir o sistema. É exatamente aí que o banco dorme.
+#
+# Este job faz uma consulta mínima a cada três dias. Não lê dado de
+# ninguém: pede zero linhas, só para o projeto registrar atividade.
+#
+# CONFIGURAR ANTES (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL     https://xxxx.supabase.co  (Project Settings → API)
+#   SUPABASE_CHAVE   a chave pública (anon / publishable) do projeto
+#
+# Sem os secrets o job falha avisando o que falta. Falhar alto é melhor
+# do que rodar em silêncio sem manter nada acordado.
+name: Manter banco acordado
+
+on:
+  schedule:
+    # A cada 3 dias, de madrugada. A pausa do Supabase leva ~7 dias, então
+    # três dias dá folga para uma execução falhar sem consequência.
+    - cron: "0 7 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  acordar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Consultar o banco
+        env:
+          URL: ${{ secrets.SUPABASE_URL }}
+          CHAVE: ${{ secrets.SUPABASE_CHAVE }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${URL:-}" ] || [ -z "${CHAVE:-}" ]; then
+            echo "::error::Faltam os secrets SUPABASE_URL e/ou SUPABASE_CHAVE."
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+
+          # `limit=0` não traz linha nenhuma. O objetivo é só o projeto
+          # registrar que houve acesso.
+          codigo=$(curl -s -o /tmp/resposta.txt -w "%{http_code}" \
+            --max-time 60 --retry 2 --retry-delay 20 --retry-all-errors \
+            "${URL}/rest/v1/bezerros?select=id&limit=0" \
+            -H "apikey: ${CHAVE}" \
+            -H "Authorization: Bearer ${CHAVE}")
+
+          echo "HTTP ${codigo}"
+
+          # 200 = respondeu. 401 também serve: o projeto está acordado e
+          # recusou por falta de login, que é o esperado sem usuário —
+          # a RLS fazendo o trabalho dela.
+          if [ "${codigo}" = "200" ] || [ "${codigo}" = "401" ]; then
+            echo "Banco acordado."
+            exit 0
+          fi
+
+          cat /tmp/resposta.txt
+          echo "::error::O banco respondeu ${codigo}."
+          echo "5xx ou sem resposta = projeto pausado ou fora do ar; abra o painel do Supabase."
+          exit 1
