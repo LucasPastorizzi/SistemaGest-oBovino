@@ -176,7 +176,6 @@
     <button class="btn branco" onclick="document.getElementById('arqImportar').click()">📂 Recuperar cópia</button>
     <button class="btn branco" onclick="abrirConfig()">⚙️ Configurações</button>
     <button class="btn branco" onclick="abrir('jAjuda')">❓ Como usar</button>
-    <button class="btn branco hidden" id="btnConta" onclick="cliqueConta()"></button>
     <input type="file" id="arqImportar" accept=".json,application/json" class="hidden" onchange="importar(this)">
   </footer>
   <p class="credito">Desenvolvido por <a href="https://flypi.com.br" target="_blank" rel="noopener">Flypi Enterprise</a></p>
@@ -263,30 +262,6 @@
 </div>
 
 <!-- Confirmação -->
-<div class="fundo-janela hidden" id="jEntrar">
-  <div class="janela" role="dialog" aria-modal="true">
-    <h2>☁️ Entrar na conta</h2>
-    <p style="font-size:1.05rem;color:#555;margin-bottom:4px">
-      Entrando na conta, seus bezerros ficam guardados também na internet.
-      Se você trocar de celular ou limpar o navegador, eles voltam sozinhos.
-    </p>
-    <label for="eEmail">E-mail</label>
-    <input type="email" id="eEmail" autocomplete="username" inputmode="email" placeholder="seu@email.com">
-    <label for="eSenha">Senha</label>
-    <input type="password" id="eSenha" autocomplete="current-password" placeholder="sua senha">
-    <p id="eErro" class="hidden" style="color:#b00020;font-weight:600"></p>
-    <p id="eSemNet" class="hidden" style="font-size:1rem;color:#7a5900;background:#fff3cd;
-       border:2px solid #e0b400;border-radius:12px;padding:10px 14px">
-      📵 Sem internet agora. Você precisa entrar uma vez para ativar o sistema —
-      tente de novo quando pegar sinal.
-    </p>
-    <div class="acoes">
-      <button class="btn grande branco" id="eCancelar" onclick="fechar('jEntrar')">Cancelar</button>
-      <button class="btn grande verde" id="eOk" onclick="entrar()">Entrar</button>
-    </div>
-  </div>
-</div>
-
 <div class="fundo-janela hidden" id="jConfirma">
   <div class="janela" role="dialog" aria-modal="true">
     <h2 id="confTitulo">Confirmar</h2>
@@ -304,9 +279,6 @@
 <script>
 const CHAVE = 'controleBezerros_dados_v1';
 const CHAVE_CFG = 'controleBezerros_config_v1';
-/* Se o dono já entrou na conta alguma vez NESTE aparelho. Decide se o
-   login é obrigatório: pedimos na primeira vez, nunca mais depois. */
-const CHAVE_ENTROU = 'controleBezerros_entrou_v1';
 
 /* ============================================================
    NUVEM — configuração
@@ -582,104 +554,7 @@ function agendarSincronizacao(){
   agendada = setTimeout(sincronizar, 2000);
 }
 
-/* ---------- Nuvem: entrar e sair ---------- */
-
-/** Mostra o botão certo: "Entrar" para quem não está logado, "Sair" com
- *  o e-mail para quem está. Fica escondido quando não há nuvem. */
-function atualizarBotaoConta(){
-  const btn = document.getElementById('btnConta');
-  btn.classList.toggle('hidden', !nuvemDisponivel());
-  btn.textContent = dono ? '☁️ Sair (' + dono.email + ')' : '☁️ Entrar na conta';
-  marcarSituacao(situacaoNuvem);
-}
-
-function cliqueConta(){
-  if(!dono) return abrirEntrar(false);
-  perguntar('Sair da conta',
-    'Seus bezerros continuam neste aparelho.<br>Para guardá-los na internet de novo, é só entrar outra vez.',
-    'Sim, sair', sair);
-}
-
-/** Já entrou alguma vez neste aparelho? */
-const jaEntrou = () => localStorage.getItem(CHAVE_ENTROU) === 'sim';
-
-/**
- * Login obrigatório, mas só na primeira vez.
- *
- * Sem isto, o botão de entrar no rodapé é fácil de nunca notar — e um
- * dono que nunca entra não tem cópia nenhuma na internet, que é
- * exatamente o problema que o banco veio resolver.
- *
- * Depois da primeira vez, nunca mais barra. Se a sessão cair (token
- * vencido, semanas sem sinal), ele entra e usa normalmente: os bezerros
- * estão no aparelho, e trancar alguém do lado de fora dos próprios
- * dados no meio do curral é pior do que ficar um tempo sem guardar.
- */
-function portaoObrigatorio(){
-  return nuvemDisponivel() && !dono && !jaEntrou();
-}
-
-function abrirEntrar(obrigatorio){
-  document.getElementById('eErro').classList.add('hidden');
-  document.getElementById('eSemNet').classList.toggle('hidden', navigator.onLine);
-  document.getElementById('eSenha').value = '';
-  // Na primeira vez não há como escapar: sem Cancelar, sem Escape, sem
-  // clicar fora. Depois, é uma janela comum.
-  document.getElementById('eCancelar').classList.toggle('hidden', !!obrigatorio);
-  document.getElementById('jEntrar').dataset.obrigatorio = obrigatorio ? 'sim' : '';
-  abrir('jEntrar');
-  document.getElementById('eEmail').focus();
-}
-
-/** Mostra o portão se for o caso. Chamada quando a nuvem fica pronta. */
-function conferirPortao(){
-  if(portaoObrigatorio()) abrirEntrar(true);
-}
-
-function erroEntrar(msg){
-  const el = document.getElementById('eErro');
-  el.textContent = msg;
-  el.classList.remove('hidden');
-}
-
-async function entrar(){
-  const email = document.getElementById('eEmail').value.trim();
-  const senha = document.getElementById('eSenha').value;
-  if(!email || !senha) return erroEntrar('Preencha o e-mail e a senha.');
-
-  const botao = document.getElementById('eOk');
-  botao.disabled = true; botao.textContent = 'Entrando…';
-  try {
-    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
-    if(error){
-      // A mensagem da biblioteca vem em inglês e fala de "credentials".
-      // Quem usa isto não precisa saber o que é isso.
-      return erroEntrar(/Invalid login/i.test(error.message)
-        ? 'E-mail ou senha errados.'
-        : 'Não foi possível entrar agora. Confira a internet e tente de novo.');
-    }
-    dono = data.user;
-    localStorage.setItem(CHAVE_ENTROU, 'sim');
-    document.getElementById('jEntrar').dataset.obrigatorio = '';
-    fechar('jEntrar');
-    atualizarBotaoConta();
-    /* Primeira coisa depois de entrar: juntar o que está no aparelho com
-       o que está na nuvem. É este passo que traz o rebanho de volta num
-       celular novo — e que sobe, pela primeira vez, o que já existia
-       neste aqui. */
-    sincronizar();
-  } catch(e){
-    erroEntrar('Não foi possível entrar agora. Confira a internet e tente de novo.');
-  } finally {
-    botao.disabled = false; botao.textContent = 'Entrar';
-  }
-}
-
-async function sair(){
-  try { await sb.auth.signOut(); } catch(e){ /* sem internet: a sessão local sai do mesmo jeito */ }
-  dono = null;
-  atualizarBotaoConta();
-}
+/* ---------- Nuvem: entrar sozinho ---------- */
 
 /**
  * Entra na conta fixa sem pedir nada a ninguém.
@@ -702,7 +577,7 @@ async function entrarSozinho(){
     });
     if(error) throw error;
     dono = data.user;
-    atualizarBotaoConta();
+    marcarSituacao(situacaoNuvem);
     /* Primeira coisa depois de entrar: juntar o que está no aparelho com
        o que está na nuvem. É este passo que traz o rebanho de volta num
        celular novo — e que sobe, pela primeira vez, o que já existia
@@ -710,7 +585,7 @@ async function entrarSozinho(){
     sincronizar();
   } catch(e){
     dono = null;
-    atualizarBotaoConta();
+    marcarSituacao(situacaoNuvem);
   }
 }
 
@@ -736,7 +611,7 @@ function iniciarNuvem(){
   sb.auth.getSession().then(({ data }) => {
     if(data.session){
       dono = data.session.user;
-      atualizarBotaoConta();
+      marcarSituacao(situacaoNuvem);
       sincronizar();
       return;
     }
@@ -752,10 +627,10 @@ function iniciarNuvem(){
      renovar). O botão precisa refletir isso sem a página recarregar. */
   sb.auth.onAuthStateChange((_evento, sessao) => {
     dono = sessao ? sessao.user : null;
-    atualizarBotaoConta();
+    marcarSituacao(situacaoNuvem);
   });
 
-  atualizarBotaoConta();
+  marcarSituacao(situacaoNuvem);
 }
 
 function carregar(chave, padrao){
@@ -907,15 +782,9 @@ function salvarTudo(){ gravar(CHAVE, bezerros); render(); agendarSincronizacao()
 
 /* ---------- Janelas ---------- */
 function abrir(id){ document.getElementById(id).classList.remove('hidden'); }
-function fechar(id){
-  // O portão da primeira entrada não fecha por clique fora nem por Escape.
-  const j = document.getElementById(id);
-  if(id === 'jEntrar' && j.dataset.obrigatorio) return;
-  j.classList.add('hidden');
-}
+function fechar(id){ document.getElementById(id).classList.add('hidden'); }
 document.addEventListener('keydown', e => {
-  if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm','jEntrar'].some(id => {
-    if(id === 'jEntrar' && document.getElementById(id).dataset.obrigatorio) return false;
+  if(e.key === 'Escape') ['jConfirma','jAjuda','jConfig','jAlerta','jForm'].some(id => {
     const j = document.getElementById(id); if(!j.classList.contains('hidden')){ fechar(id); return true; } return false;
   });
 });
