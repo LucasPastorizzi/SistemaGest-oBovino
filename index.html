@@ -330,6 +330,45 @@ const NUVEM = {
   chave: 'sb_publishable_y5SzK4jsE1XcKRx_71OMyA_tot0NG7j',
 };
 
+/* ============================================================
+   NUVEM — a conta
+   ============================================================
+   O dono não faz login. Ele abre o endereço e já está dentro.
+
+   POR QUE EXISTE UMA CONTA, ENTÃO
+
+   As regras de acesso do banco (RLS) só devolvem linhas para alguém
+   autenticado: `dono = auth.uid()`. Sem ninguém logado, toda gravação é
+   recusada — e o sistema voltaria a guardar só no navegador, que é
+   exatamente o problema que o banco veio resolver.
+
+   Então o sistema entra sozinho, sempre nesta mesma conta. Uma conta,
+   um rebanho. Quem usa nunca vê tela de senha e nunca digita nada.
+
+   O QUE ISSO CUSTA, DITO SEM RODEIO
+
+   A senha abaixo está no código de uma página pública. Quem souber o
+   endereço e abrir o código-fonte consegue ler e editar os bezerros.
+   Foi escolha consciente: do outro lado da balança estava pedir senha a
+   alguém que não quer digitar senha — e aí não há cópia nenhuma na
+   internet, que é o pior dos dois mundos.
+
+   O QUE ESSA CONTA NÃO ALCANÇA
+
+   Ela não está na tabela `equipe`, e toda tabela do CRM da Flypi exige
+   `eh_equipe()`. Mesmo com esta senha em mãos, não se lê um único lead.
+   O estrago possível começa e termina na lista de bezerros.
+
+   CRIAR ESTA CONTA — uma vez, no painel do Supabase:
+     Authentication → Users → Add user → Create new user
+     E-mail e senha exatamente como estão aqui
+     ✅ Auto Confirm User  (senão a conta nasce esperando confirmação)
+============================================================ */
+const CONTA = {
+  email: 'bezerros@flypi.com.br',
+  senha: 'ehmDUn1cce2QG5QQKXYKtOYnIxn9',
+};
+
 /** Endereço da biblioteca do Supabase. Só é baixada se a nuvem estiver
  *  configurada — ver `carregarBiblioteca()`. */
 const BIBLIOTECA = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js';
@@ -642,6 +681,39 @@ async function sair(){
   atualizarBotaoConta();
 }
 
+/**
+ * Entra na conta fixa sem pedir nada a ninguém.
+ *
+ * É melhor-esforço, de propósito. Se falhar — sem internet, projeto
+ * pausado por inatividade, senha trocada no painel sem trocar aqui — o
+ * sistema continua funcionando inteiro com o que está no aparelho.
+ *
+ * E falha em silêncio: o dono não pediu para entrar, não sabe que existe
+ * uma conta, e não teria o que fazer com uma mensagem de erro. Quem conta
+ * a verdade é o selo de situação, que fica escondido enquanto não há
+ * login — prometer "guardado na internet" sem estar guardando seria pior
+ * do que não dizer nada.
+ */
+async function entrarSozinho(){
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({
+      email: CONTA.email,
+      password: CONTA.senha,
+    });
+    if(error) throw error;
+    dono = data.user;
+    atualizarBotaoConta();
+    /* Primeira coisa depois de entrar: juntar o que está no aparelho com
+       o que está na nuvem. É este passo que traz o rebanho de volta num
+       celular novo — e que sobe, pela primeira vez, o que já existia
+       neste aqui. */
+    sincronizar();
+  } catch(e){
+    dono = null;
+    atualizarBotaoConta();
+  }
+}
+
 function iniciarNuvem(){
   // Pode ser chamada mais de uma vez (no `load`, e de novo se a
   // biblioteca chegar atrasada). Criar um segundo cliente deixaria dois
@@ -658,19 +730,23 @@ function iniciarNuvem(){
     },
   });
 
-  /* Recupera a sessão que já estava salva neste aparelho. É o caminho
-     normal: o dono entra uma vez e nas próximas aberturas já chega
-     logado, sem ver tela de senha. */
+  /* Reaproveita a sessão que já estava salva neste aparelho; só entra de
+     novo quando não há nenhuma. Na prática: o primeiro acesso faz um
+     login invisível, e os seguintes nem isso. */
   sb.auth.getSession().then(({ data }) => {
-    dono = data.session ? data.session.user : null;
-    if(dono) localStorage.setItem(CHAVE_ENTROU, 'sim');
-    atualizarBotaoConta();
-    if(dono) sincronizar(); else conferirPortao();
-  }).catch(() => { atualizarBotaoConta(); conferirPortao(); });
+    if(data.session){
+      dono = data.session.user;
+      atualizarBotaoConta();
+      sincronizar();
+      return;
+    }
+    entrarSozinho();
+  }).catch(entrarSozinho);
 
   /* Voltou o sinal: sobe o que ficou pendente. É o caso de quem cadastrou
-     a manhã inteira no pasto e só pega rede ao chegar na sede. */
-  window.addEventListener('online', sincronizar);
+     a manhã inteira no pasto e só pega rede ao chegar na sede. Se o login
+     invisível tinha falhado por falta de internet, é aqui que ele acontece. */
+  window.addEventListener('online', () => dono ? sincronizar() : entrarSozinho());
 
   /* A sessão também pode cair sozinha (token expirado sem internet para
      renovar). O botão precisa refletir isso sem a página recarregar. */
