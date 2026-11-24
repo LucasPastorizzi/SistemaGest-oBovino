@@ -44,27 +44,31 @@ aparelho e sobem na próxima tentativa.
 Bezerro excluído é **marcado**, não apagado: sem isso ele voltaria do servidor na
 sincronização seguinte.
 
-## Quem usa não faz login
+## Entrar: só o nome de usuário
 
-Ele abre o endereço e está dentro. Não existe tela de senha, nem botão de
-entrar, nem botão de sair.
+Não há senha. A pessoa digita um nome de usuário que exista e entra. O aparelho
+lembra: depois da primeira vez, abre direto, inclusive sem internet. A primeira
+entrada em cada aparelho precisa de internet. O botão **Sair** fica no rodapé.
 
-Mas existe uma conta. As regras do banco só devolvem linhas para alguém
-autenticado (`dono = auth.uid()`), então sem conta nenhuma a nuvem não grava
-nada — e o sistema voltaria a guardar só no navegador, que é o problema que a
-nuvem veio resolver. A conta está no bloco `CONTA` do `index.html`, e o sistema
-entra nela sozinho no primeiro acesso. Uma conta, um rebanho.
+Cada usuário tem o seu rebanho. Por trás, cada um é uma conta no Supabase, e as
+regras do banco (`dono = auth.uid()`) separam os dados. Usuário existente =
+conta existente; não há lista de nomes no código.
 
-**O que isso custa, dito sem rodeio:** a senha está no código de uma página
-pública. Quem souber o endereço e abrir o código-fonte consegue ler e editar os
-bezerros. Foi escolha consciente — do outro lado da balança estava pedir senha a
-alguém que não vai digitar senha, e aí não há cópia nenhuma na internet.
+**Cadastrar um usuário:** Authentication → Users → **Add user** → Create new
+user, com o e-mail `nome@bezerros.flypi.com.br` (minúsculo, sem acento), a senha
+de `CONTAS.senha` do `index.html` e **Auto Confirm User** marcado.
 
-**O que essa conta não alcança:** ela não está na tabela `equipe`, e toda tabela
-do CRM da Flypi exige `eh_equipe()`. Com esta senha em mãos não se lê um único
-lead. O estrago possível começa e termina na lista de bezerros.
+O usuário `bezerros` é a conta que já existia (`bezerros@flypi.com.br`) e fica
+com o rebanho atual, tanto na nuvem quanto o que já estava no aparelho.
 
-O login é melhor-esforço e falha calado: sem internet, com o projeto pausado ou
+**O que isso custa, dito sem rodeio:** quem souber ou adivinhar um nome de
+usuário vê e edita os bezerros dele. A senha comum está no código de uma página
+pública e não protege nada; existe porque o Supabase exige uma.
+
+**O que essas contas não alcançam:** não estão na tabela `equipe`, e toda tabela
+do CRM da Flypi exige `eh_equipe()`. Nunca ponha uma delas na `equipe`.
+
+Depois da primeira entrada, a conexão com a nuvem é melhor-esforço e falha calado: sem internet, com o projeto pausado ou
 com a senha trocada no painel sem trocar no código, o sistema continua
 funcionando inteiro com o que está no aparelho. O selo de situação simplesmente
 não aparece — prometer "guardado na internet" sem estar guardando seria pior do
@@ -78,10 +82,9 @@ sempre foi.
 1. Criar um projeto no [Supabase](https://supabase.com) (região `sa-east-1`).
 2. SQL Editor → New query → colar `supabase/migrations/20261108120000_bezerros.sql`
    → Run.
-3. Authentication → Users → **Add user** → Create new user: criar a conta com o
-   e-mail e a senha que estão no bloco `CONTA` do `index.html`, marcando
-   **Auto Confirm User** — sem isso ela nasce esperando um e-mail de confirmação
-   e o login sozinho falha.
+3. Authentication → Users → **Add user** → Create new user: criar uma conta por
+   usuário (ver "Cadastrar um usuário"), marcando **Auto Confirm User** — sem isso
+   ela nasce esperando um e-mail de confirmação e a entrada falha.
 4. Authentication → Sign In / Providers → Email → desmarcar **Allow new users to
    sign up**. O app não tem tela de cadastro, mas a chave pública está no código
    e com ela dá para chamar `signUp` direto na API. Desligado, as contas passam
