@@ -46,6 +46,18 @@
   .nuvem.guardando{background:#eef1f5;color:#44506b;border-color:#c3cbd9}
   .nuvem.pendente{background:#fff3cd;color:#7a5900;border-color:#e0b400}
 
+  /* Tela de entrada: enquanto ninguém entrou, é a única coisa visível. */
+  body.fora > :not(.entrada):not(script){display:none !important}
+  body:not(.fora) > .entrada{display:none}
+  .entrada{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--verde-esc)}
+  .entrada form{background:#fff;border-radius:18px;padding:28px 24px;width:100%;max-width:440px}
+  .entrada h1{margin:0 0 4px;font-size:1.6rem;color:var(--verde-esc)}
+  .entrada p{margin:0 0 18px}
+  .entrada label{display:block;font-weight:700;margin-bottom:6px}
+  .entrada input{width:100%;font-size:1.2rem;font-family:inherit;padding:14px;border:2px solid var(--borda);border-radius:12px;margin-bottom:14px}
+  .entrada input:focus-visible{outline:4px solid #ffb300;outline-offset:1px}
+  .entrada .btn{width:100%}
+
   main{max-width:1150px;margin:0 auto;padding:16px}
 
   .btn{font-size:1rem;font-family:inherit;padding:12px 20px;border-radius:12px;border:2px solid transparent;cursor:pointer;font-weight:600;line-height:1.2}
@@ -137,7 +149,18 @@
   }
 </style>
 </head>
-<body>
+<body class="fora">
+<section class="entrada">
+  <form id="fEntrar" onsubmit="entrar(event)">
+    <h1>🐮 Controle de Bezerros</h1>
+    <p>Digite o seu nome de usuário para entrar.</p>
+    <div id="erroEntrar" class="erro hidden" role="alert"></div>
+    <label for="eUsuario">Usuário</label>
+    <input type="text" id="eUsuario" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="30" required>
+    <button class="btn grande verde" id="btnEntrar" type="submit">Entrar</button>
+  </form>
+</section>
+
 
 <header class="topo">
   <div>
@@ -176,6 +199,7 @@
     <button class="btn branco" onclick="document.getElementById('arqImportar').click()">📂 Recuperar cópia</button>
     <button class="btn branco" onclick="abrirConfig()">⚙️ Configurações</button>
     <button class="btn branco" onclick="abrir('jAjuda')">❓ Como usar</button>
+    <button class="btn branco" onclick="sair()">🚪 Sair (<span id="quemEntrou"></span>)</button>
     <input type="file" id="arqImportar" accept=".json,application/json" class="hidden" onchange="importar(this)">
   </footer>
   <p class="credito">Desenvolvido por <a href="https://flypi.com.br" target="_blank" rel="noopener">Flypi Enterprise</a></p>
@@ -277,8 +301,36 @@
 
 
 <script>
-const CHAVE = 'controleBezerros_dados_v1';
-const CHAVE_CFG = 'controleBezerros_config_v1';
+/* ============================================================
+   QUEM ENTROU
+   ============================================================
+   Só o nome de usuário, sem senha. Fica lembrado no aparelho: depois da
+   primeira vez o sistema abre direto, inclusive sem internet.
+
+   Cada usuário tem o seu rebanho, e por isso as suas próprias chaves no
+   navegador. O usuário `bezerros` é a conta que já existia: fica com as
+   chaves antigas, e o que estava no aparelho continua sendo dele.
+============================================================ */
+const CHAVE_USUARIO = 'controleBezerros_usuario_v1';
+const USUARIO_ANTIGO = 'bezerros';
+
+/** Como o nome é comparado: sem acento, sem maiúscula, sem espaço nas
+ *  pontas. Devolve '' quando não pode ser um nome de usuário. */
+function limparUsuario(v){
+  const n = String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return /^[a-z0-9][a-z0-9._-]{1,29}$/.test(n) ? n : '';
+}
+function usuarioSalvo(){
+  try { return limparUsuario(localStorage.getItem(CHAVE_USUARIO)); } catch(e){ return ''; }
+}
+
+/** Lido uma vez só, ao abrir. Entrar e sair recarregam a página, então
+ *  nunca há dados de um usuário na memória enquanto outro entra. */
+const USUARIO = usuarioSalvo();
+const sufixo = u => u === USUARIO_ANTIGO ? '' : '__' + u;
+
+const CHAVE = 'controleBezerros_dados_v1' + sufixo(USUARIO);
+const CHAVE_CFG = 'controleBezerros_config_v1' + sufixo(USUARIO);
 
 /* ============================================================
    NUVEM — configuração
@@ -303,43 +355,45 @@ const NUVEM = {
 };
 
 /* ============================================================
-   NUVEM — a conta
+   NUVEM — as contas
    ============================================================
-   O dono não faz login. Ele abre o endereço e já está dentro.
+   Cada usuário é uma conta no Supabase, e as regras do banco (RLS,
+   `dono = auth.uid()`) separam os rebanhos. Usuário existente = conta
+   existente: não há lista de nomes no código.
 
-   POR QUE EXISTE UMA CONTA, ENTÃO
-
-   As regras de acesso do banco (RLS) só devolvem linhas para alguém
-   autenticado: `dono = auth.uid()`. Sem ninguém logado, toda gravação é
-   recusada — e o sistema voltaria a guardar só no navegador, que é
-   exatamente o problema que o banco veio resolver.
-
-   Então o sistema entra sozinho, sempre nesta mesma conta. Uma conta,
-   um rebanho. Quem usa nunca vê tela de senha e nunca digita nada.
+   CADASTRAR UM USUÁRIO — no painel do Supabase:
+     Authentication → Users → Add user → Create new user
+     E-mail:  nome@bezerros.flypi.com.br   (nome minúsculo, sem acento)
+     Senha:   a de `CONTAS.senha`, aqui embaixo
+     ✅ Auto Confirm User  (senão a conta nasce esperando confirmação)
 
    O QUE ISSO CUSTA, DITO SEM RODEIO
 
-   A senha abaixo está no código de uma página pública. Quem souber o
-   endereço e abrir o código-fonte consegue ler e editar os bezerros.
-   Foi escolha consciente: do outro lado da balança estava pedir senha a
-   alguém que não quer digitar senha — e aí não há cópia nenhuma na
-   internet, que é o pior dos dois mundos.
+   Entrar sem senha quer dizer que quem souber (ou adivinhar) um nome de
+   usuário vê e edita os bezerros dele. A senha abaixo é a mesma para
+   todos e está numa página pública; ela existe só porque o Supabase
+   exige uma, e não protege nada. Foi escolha consciente.
 
-   O QUE ESSA CONTA NÃO ALCANÇA
+   O QUE ESSAS CONTAS NÃO ALCANÇAM
 
-   Ela não está na tabela `equipe`, e toda tabela do CRM da Flypi exige
-   `eh_equipe()`. Mesmo com esta senha em mãos, não se lê um único lead.
-   O estrago possível começa e termina na lista de bezerros.
-
-   CRIAR ESTA CONTA — uma vez, no painel do Supabase:
-     Authentication → Users → Add user → Create new user
-     E-mail e senha exatamente como estão aqui
-     ✅ Auto Confirm User  (senão a conta nasce esperando confirmação)
+   Não estão na tabela `equipe`, e toda tabela do CRM da Flypi exige
+   `eh_equipe()`. O domínio é próprio para nunca coincidir com o e-mail
+   de alguém da equipe. Nunca ponha uma conta destas na `equipe`.
 ============================================================ */
-const CONTA = {
-  email: 'bezerros@flypi.com.br',
+const CONTAS = {
+  dominio: 'bezerros.flypi.com.br',
   senha: 'ehmDUn1cce2QG5QQKXYKtOYnIxn9',
 };
+/** A conta que já existia tem outro domínio; as novas seguem a regra. */
+const emailDe = u => u === USUARIO_ANTIGO ? 'bezerros@flypi.com.br' : u + '@' + CONTAS.dominio;
+
+/** Cliente do Supabase com a sessão guardada por usuário: a sessão de um
+ *  nunca é reaproveitada por outro no mesmo aparelho. */
+function criarCliente(u){
+  return window.supabase.createClient(NUVEM.url, NUVEM.chave, {
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'controleBezerros_sessao__' + u },
+  });
+}
 
 /** Endereço da biblioteca do Supabase. Só é baixada se a nuvem estiver
  *  configurada — ver `carregarBiblioteca()`. */
@@ -572,8 +626,8 @@ function agendarSincronizacao(){
 async function entrarSozinho(){
   try {
     const { data, error } = await sb.auth.signInWithPassword({
-      email: CONTA.email,
-      password: CONTA.senha,
+      email: emailDe(USUARIO),
+      password: CONTAS.senha,
     });
     if(error) throw error;
     dono = data.user;
@@ -595,15 +649,7 @@ function iniciarNuvem(){
   // ouvintes de sessão ativos, e cada troca de login dispararia tudo em
   // duplicidade.
   if(sb || !nuvemDisponivel()) return;
-  sb = window.supabase.createClient(NUVEM.url, NUVEM.chave, {
-    auth: {
-      // O dono loga uma vez por aparelho e não é deslogado sozinho.
-      // Pedir senha de novo no meio do curral é o tipo de atrito que
-      // faz um sistema ser abandonado.
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  });
+  sb = criarCliente(USUARIO);
 
   /* Reaproveita a sessão que já estava salva neste aparelho; só entra de
      novo quando não há nenhuma. Na prática: o primeiro acesso faz um
@@ -631,6 +677,51 @@ function iniciarNuvem(){
   });
 
   marcarSituacao(situacaoNuvem);
+}
+
+/* ---------- Entrar e sair ---------- */
+
+function mostrarErroEntrar(texto){
+  const el = document.getElementById('erroEntrar');
+  el.textContent = texto;
+  el.classList.toggle('hidden', !texto);
+}
+
+/** Só entra quem tem conta. Isso exige internet, mas só na primeira vez
+ *  em cada aparelho. */
+async function entrar(ev){
+  ev.preventDefault();
+  mostrarErroEntrar('');
+  const u = limparUsuario(document.getElementById('eUsuario').value);
+  if(!u) return mostrarErroEntrar('Esse usuário não existe. Confira o nome e tente de novo.');
+
+  const btn = document.getElementById('btnEntrar');
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  try {
+    if(!await carregarBiblioteca()) throw new Error('sem internet');
+    const { error } = await criarCliente(u).auth.signInWithPassword({ email: emailDe(u), password: CONTAS.senha });
+    if(error) throw error;
+    localStorage.setItem(CHAVE_USUARIO, u);
+    location.reload();
+  } catch(e){
+    // Conta inexistente é diferente de falta de sinal: dizer "não existe"
+    // a quem está sem internet mandaria a pessoa procurar o erro errado.
+    const inexistente = e && (e.code === 'invalid_credentials' || /invalid login/i.test(e.message || ''));
+    mostrarErroEntrar(inexistente
+      ? 'Esse usuário não existe. Confira o nome e tente de novo.'
+      : 'Não deu para entrar agora. Confira a internet e tente de novo.');
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+/** Os bezerros ficam no aparelho, na chave do usuário: o que ainda não
+ *  subiu para a nuvem sobe quando ele entrar de novo. */
+function sair(){
+  perguntar('🚪 Sair', 'Para voltar, é preciso ter <b>internet</b> e digitar o usuário <b>' + esc(USUARIO) + '</b>. Os bezerros continuam guardados.', 'Sim, sair', async () => {
+    try { if(sb) await sb.auth.signOut({ scope: 'local' }); } catch(e){ /* sem internet: a sessão local já basta */ }
+    localStorage.removeItem(CHAVE_USUARIO);
+    location.reload();
+  });
 }
 
 function carregar(chave, padrao){
@@ -973,14 +1064,20 @@ function imprimir(){
 /* Busca a biblioteca e só então liga a nuvem. Se não vier — sem sinal,
    ou nuvem não configurada — nada acontece, e é esse o estado normal de
    quem está no pasto. */
-carregarBiblioteca().then(veio => { if(veio) iniciarNuvem(); });
+if(USUARIO) carregarBiblioteca().then(veio => { if(veio) iniciarNuvem(); });
 
 /* O "há 5 minutos" precisa envelhecer sozinho; sem isto ficaria
    congelado em "agora mesmo" enquanto a tela estiver aberta. */
 setInterval(() => { if(situacaoNuvem === 'guardado') marcarSituacao('guardado'); }, 60000);
 
-render();
-mostrarAlerta();
+document.body.classList.toggle('fora', !USUARIO);
+if(USUARIO){
+  document.getElementById('quemEntrou').textContent = USUARIO;
+  render();
+  mostrarAlerta();
+} else {
+  document.getElementById('eUsuario').focus();
+}
 </script>
 </body>
 </html>
