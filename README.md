@@ -55,7 +55,9 @@ regras do banco (`dono = auth.uid()`) separam os dados. Usuário existente =
 conta existente; não há lista de nomes no código.
 
 **Cadastrar um usuário:** Authentication → Users → **Add user** → Create new
-user, com o e-mail `nome@bezerros.flypi.com.br` (minúsculo, sem acento), a senha
+user, com o e-mail `nome@bezerros.flypi.com.br` (minúsculo, sem acento
+e com ponto no lugar do espaço: "Júnior Monroe" entra pela conta
+`junior.monroe@bezerros.flypi.com.br`), a senha
 de `CONTAS.senha` do `index.html` e **Auto Confirm User** marcado.
 
 O usuário `bezerros` é a conta que já existia (`bezerros@flypi.com.br`) e fica
